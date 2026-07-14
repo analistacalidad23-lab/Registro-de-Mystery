@@ -4,7 +4,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import numpy as np
 
-# 1. Configuración de la página del Dashboard
+# 1. Configuración de la página
 st.set_page_config(
     page_title="Dashboard Calidad y Ventas - Autolux",
     page_icon="🎯",
@@ -20,9 +20,9 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown('<div class="main-title">🎯 Tablero de Gestión: SSI, NPS y Subíndices - VENTAS</div>', unsafe_allow_html=True)
-st.markdown('<div class="subtitle">Seguimiento de Satisfacción, Lealtad del Cliente y Evolución Mensual</div>', unsafe_allow_html=True)
+st.markdown('<div class="subtitle">Seguimiento de Satisfacción, Lealtad del Cliente, Evolución y Comisiones</div>', unsafe_allow_html=True)
 
-# 2. Conexión de Datos a la hoja "VENTAS26"
+# 2. Conexión de Datos
 SHEET_ID = "1PGoOlFTN2WuuiEqRk0KPrcLZL6pEcFVeNWo35shsUSA"
 SHEET_NAME = "VENTAS26"
 CSV_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={SHEET_NAME}"
@@ -60,16 +60,18 @@ if not df_raw.empty:
 
     df_procesado = df_raw.copy()
     
-    # Preparar Fechas (Meses y Años)
+    # Preparar Fechas
     try:
         df_procesado['Fecha_DT'] = pd.to_datetime(df_procesado[col_fecha], errors='coerce')
         df_procesado['Mes_Nombre'] = df_procesado['Fecha_DT'].dt.strftime('%B').str.lower()
         df_procesado['Mes_Num'] = df_procesado['Fecha_DT'].dt.month
         df_procesado['Año'] = df_procesado['Fecha_DT'].dt.year.fillna(0).astype(int).astype(str)
+        df_procesado['Mes_Período'] = df_procesado['Fecha_DT'].dt.strftime('%Y-%m')
     except:
         df_procesado['Mes_Nombre'] = df_procesado[col_fecha].astype(str)
         df_procesado['Mes_Num'] = 1
         df_procesado['Año'] = "N/D"
+        df_procesado['Mes_Período'] = df_procesado[col_fecha].astype(str)
 
     # Funciones de cálculo
     def calcular_nps(serie):
@@ -87,13 +89,16 @@ if not df_raw.empty:
             if total == 0: return np.nan
             return (promotores - detractores) / total * 100.0
 
-    # Limpieza de columnas numéricas (SSI y Subíndices)
+    # Limpieza de SSI y Subíndices
     df_procesado['SSI_Num'] = pd.to_numeric(df_procesado[col_ssi].astype(str).str.replace(',', '.').str.replace('%', ''), errors='coerce')
-    
-    # Identificar columnas de subíndices (01, 02, etc.)
     cols_subindices = [c for c in columnas_disponibles if any(x in c for x in ['01', '02', '03', '04', '05', '08', '09', '11'])]
     for c in cols_subindices:
         df_procesado[c] = pd.to_numeric(df_procesado[c].astype(str).str.replace(',', '.').str.replace('%', ''), errors='coerce')
+
+    # Detectar dinámicamente la columna "Atencion Vendedor" para las comisiones
+    col_atencion_vend = next((c for c in cols_subindices if 'atencion' in c.lower() and 'vendedor' in c.lower()), None)
+    if not col_atencion_vend:
+        col_atencion_vend = next((c for c in cols_subindices if '02' in c), None) # Fallback al prefijo 02
 
     # 4. Filtros Globales en Barra Lateral
     st.sidebar.header("🔍 Filtros de Visualización")
@@ -101,18 +106,28 @@ if not df_raw.empty:
     años_disp = sorted([a for a in df_procesado['Año'].unique() if a != "0"], reverse=True)
     año_sel = st.sidebar.selectbox("Año:", ["Todos"] + años_disp)
     
+    meses_disp = sorted(df_procesado['Mes_Período'].dropna().unique().tolist())
+    meses_sel = st.sidebar.multiselect("Filtrar por Mes (Período):", meses_disp, default=meses_disp)
+
     bocas_disp = sorted(df_procesado[col_sucursal].dropna().astype(str).unique().tolist())
     boca_sel = st.sidebar.selectbox("Seleccionar Boca de Venta:", ["Todas"] + bocas_disp)
 
-    # Aplicar filtros de Año y Boca
+    # Aplicar filtros
     df_filtrado = df_procesado.copy()
     if año_sel != "Todos":
         df_filtrado = df_filtrado[df_filtrado['Año'] == año_sel]
     if boca_sel != "Todas":
         df_filtrado = df_filtrado[df_filtrado[col_sucursal].astype(str) == boca_sel]
+    if meses_sel:
+        df_filtrado = df_filtrado[df_filtrado['Mes_Período'].isin(meses_sel)]
 
     # 5. Creación de Pestañas
-    tab_resumen, tab_ranking, tab_evolucion = st.tabs(["⏱️ Relojes de Objetivos", "🏆 Ranking Vendedores", "📅 Evolución Mensual"])
+    tab_resumen, tab_ranking, tab_evolucion, tab_comisiones = st.tabs([
+        "⏱️ Relojes de Objetivos", 
+        "🏆 Ranking Vendedores", 
+        "📅 Evolución Mensual",
+        "💰 Comisiones y Liquidación"
+    ])
 
     # --- PESTAÑA 1: RELOJES ---
     with tab_resumen:
@@ -162,11 +177,9 @@ if not df_raw.empty:
         else:
             st.warning("No hay datos para mostrar el ranking.")
 
-    # --- PESTAÑA 3: EVOLUCIÓN MENSUAL Y SUBÍNDICES (NUEVA) ---
+    # --- PESTAÑA 3: EVOLUCIÓN MENSUAL ---
     with tab_evolucion:
         st.write(f"### Desempeño Mensual - Boca de Venta: {boca_sel} | Año: {año_sel}")
-        
-        # Agrupación por Mes
         if 'Mes_Num' in df_filtrado.columns:
             df_mensual = df_filtrado.sort_values('Mes_Num').groupby('Mes_Nombre', sort=False)
         else:
@@ -174,57 +187,82 @@ if not df_raw.empty:
 
         resumen_mensual = []
         for mes, grupo in df_mensual:
-            fila = {
-                'Mes': mes.capitalize(),
-                'Q encuestas': len(grupo),
-                'SSI Puro': grupo['SSI_Num'].mean(),
-                'NPS dealer': calcular_nps(grupo[col_nps])
-            }
-            # Agregar promedios de los subíndices dinámicamente
-            for c in cols_subindices:
-                fila[c] = grupo[c].mean()
+            fila = {'Mes': mes.capitalize(), 'Q encuestas': len(grupo), 'SSI Puro': grupo['SSI_Num'].mean(), 'NPS dealer': calcular_nps(grupo[col_nps])}
+            for c in cols_subindices: fila[c] = grupo[c].mean()
             resumen_mensual.append(fila)
 
         df_tabla_mensual = pd.DataFrame(resumen_mensual)
-
         if not df_tabla_mensual.empty:
-            # 1. Gráfico de Evolución Relacionado
             fig_evolucion = go.Figure()
-            fig_evolucion.add_trace(go.Scatter(x=df_tabla_mensual['Mes'], y=df_tabla_mensual['SSI Puro'], mode='lines+markers+text', name='SSI Puro', line=dict(color='#1E3A8A', width=3), marker=dict(size=10), text=df_tabla_mensual['SSI Puro'].apply(lambda x: f"{x:.1f}"), textposition='top center'))
-            fig_evolucion.add_trace(go.Scatter(x=df_tabla_mensual['Mes'], y=df_tabla_mensual['NPS dealer'], mode='lines+markers+text', name='NPS dealer', line=dict(color='#2ecc71', width=3), marker=dict(size=10), text=df_tabla_mensual['NPS dealer'].apply(lambda x: f"{x:.1f}%" if pd.notna(x) else ""), textposition='bottom center'))
-            
-            fig_evolucion.update_layout(title="Evolución de SSI y NPS por Mes", xaxis_title="Mes", yaxis_title="Puntaje / Porcentaje", yaxis_range=[0, 110], template="plotly_white", hovermode="x unified")
+            fig_evolucion.add_trace(go.Scatter(x=df_tabla_mensual['Mes'], y=df_tabla_mensual['SSI Puro'], mode='lines+markers+text', name='SSI Puro', line=dict(color='#1E3A8A', width=3), text=df_tabla_mensual['SSI Puro'].apply(lambda x: f"{x:.1f}"), textposition='top center'))
+            fig_evolucion.add_trace(go.Scatter(x=df_tabla_mensual['Mes'], y=df_tabla_mensual['NPS dealer'], mode='lines+markers+text', name='NPS dealer', line=dict(color='#2ecc71', width=3), text=df_tabla_mensual['NPS dealer'].apply(lambda x: f"{x:.1f}%" if pd.notna(x) else ""), textposition='bottom center'))
+            fig_evolucion.update_layout(title="Evolución de SSI y NPS", yaxis_range=[0, 110], template="plotly_white")
             st.plotly_chart(fig_evolucion, use_container_width=True)
 
-            # 2. Tabla de Datos Formateada
-            st.write("#### Cuadro de Mando Mensual y Subíndices")
-            
-            # Fila de Totales
-            totales = {
-                'Mes': 'Total',
-                'Q encuestas': df_tabla_mensual['Q encuestas'].sum(),
-                'SSI Puro': df_filtrado['SSI_Num'].mean(),
-                'NPS dealer': calcular_nps(df_filtrado[col_nps])
-            }
-            for c in cols_subindices:
-                totales[c] = df_filtrado[c].mean()
-                
+            totales = {'Mes': 'Total', 'Q encuestas': df_tabla_mensual['Q encuestas'].sum(), 'SSI Puro': df_filtrado['SSI_Num'].mean(), 'NPS dealer': calcular_nps(df_filtrado[col_nps])}
+            for c in cols_subindices: totales[c] = df_filtrado[c].mean()
             df_tabla_mensual.loc[len(df_tabla_mensual)] = totales
 
-            # Formateo visual para la tabla
             formatos = {'Q encuestas': '{:.0f}', 'SSI Puro': '{:.1f}', 'NPS dealer': '{:.1f}%'}
-            for c in cols_subindices:
-                formatos[c] = '{:.1f}'
+            for c in cols_subindices: formatos[c] = '{:.1f}'
+            st.dataframe(df_tabla_mensual.style.format(formatos, na_rep="-").apply(lambda x: ['font-weight: bold; background-color: #f0f2f6' if x['Mes'] == 'Total' else '' for i in x], axis=1), use_container_width=True, hide_index=True)
 
-            st.dataframe(
-                df_tabla_mensual.style.format(formatos, na_rep="-").apply(
-                    lambda x: ['font-weight: bold; background-color: #f0f2f6' if x['Mes'] == 'Total' else '' for i in x], axis=1
-                ),
-                use_container_width=True,
-                hide_index=True
-            )
+    # --- PESTAÑA 4: COMISIONES Y LIQUIDACIÓN (NUEVA) ---
+    with tab_comisiones:
+        st.write("### 💰 Tabla de Cálculo de Comisiones SSI")
+        st.info("💡 Utiliza los filtros de Mes y Año de la barra lateral para liquidar las comisiones de un período específico.")
+        
+        if not col_atencion_vend:
+            st.error("No se detectó la columna '02 Atencion Vendedor' en los datos.")
         else:
-            st.warning("No hay datos registrados para los filtros seleccionados.")
+            datos_comision = []
+            
+            for vend, grupo in df_filtrado.groupby(col_vendedor):
+                cant_encuestas = len(grupo)
+                ssi_promedio = grupo['SSI_Num'].mean()
+                atencion_promedio = grupo[col_atencion_vend].mean()
+                
+                # Lógica de cálculo de comisión estricta
+                if pd.isna(atencion_promedio):
+                    comision = 0.00
+                elif atencion_promedio < 95.6:
+                    comision = -0.05
+                else:
+                    comision = 0.01
+                    
+                datos_comision.append({
+                    'Vendedor': vend,
+                    'Cantidad de Encuestas': cant_encuestas,
+                    'Atención del Vendedor': atencion_promedio,
+                    'SSI Promedio': ssi_promedio,
+                    'Comisión SSI': comision
+                })
+                
+            df_comisiones = pd.DataFrame(datos_comision)
+            
+            if not df_comisiones.empty:
+                # Ordenamos de mayor a menor por Atención del Vendedor
+                df_comisiones = df_comisiones.sort_values('Atención del Vendedor', ascending=False)
+                
+                # Formateo de la tabla (Colores dependiendo del resultado de la comisión)
+                def aplicar_colores_comision(val):
+                    if val == -0.05: return 'color: #e74c3c; font-weight: bold;'  # Rojo
+                    elif val == 0.01: return 'color: #2ecc71; font-weight: bold;' # Verde
+                    return 'color: #7f8c8d;' # Gris para 0
+                
+                st.dataframe(
+                    df_comisiones.style
+                    .format({
+                        'Atención del Vendedor': '{:.1f}',
+                        'SSI Promedio': '{:.1f}',
+                        'Comisión SSI': '{:.2f}'
+                    })
+                    .map(aplicar_colores_comision, subset=['Comisión SSI']),
+                    use_container_width=True, 
+                    hide_index=True
+                )
+            else:
+                st.warning("No hay datos suficientes para calcular las comisiones con los filtros actuales.")
 
 else:
     st.warning("No se pudo leer la hoja VENTAS26 o está vacía.")
