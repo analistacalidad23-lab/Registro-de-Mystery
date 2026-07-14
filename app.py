@@ -91,4 +91,140 @@ if not df_raw.empty:
     df_procesado['SSI_Num'] = pd.to_numeric(df_procesado[col_ssi].astype(str).str.replace(',', '.').str.replace('%', ''), errors='coerce')
     
     # Identificar columnas de subíndices (01, 02, etc.)
-    cols_subindices = [c for c in columnas_disponibles if any(x in c for x in ['
+    cols_subindices = [c for c in columnas_disponibles if any(x in c for x in ['01', '02', '03', '04', '05', '08', '09', '11'])]
+    for c in cols_subindices:
+        df_procesado[c] = pd.to_numeric(df_procesado[c].astype(str).str.replace(',', '.').str.replace('%', ''), errors='coerce')
+
+    # 4. Filtros Globales en Barra Lateral
+    st.sidebar.header("🔍 Filtros de Visualización")
+    
+    años_disp = sorted([a for a in df_procesado['Año'].unique() if a != "0"], reverse=True)
+    año_sel = st.sidebar.selectbox("Año:", ["Todos"] + años_disp)
+    
+    bocas_disp = sorted(df_procesado[col_sucursal].dropna().astype(str).unique().tolist())
+    boca_sel = st.sidebar.selectbox("Seleccionar Boca de Venta:", ["Todas"] + bocas_disp)
+
+    # Aplicar filtros de Año y Boca
+    df_filtrado = df_procesado.copy()
+    if año_sel != "Todos":
+        df_filtrado = df_filtrado[df_filtrado['Año'] == año_sel]
+    if boca_sel != "Todas":
+        df_filtrado = df_filtrado[df_filtrado[col_sucursal].astype(str) == boca_sel]
+
+    # 5. Creación de Pestañas
+    tab_resumen, tab_ranking, tab_evolucion = st.tabs(["⏱️ Relojes de Objetivos", "🏆 Ranking Vendedores", "📅 Evolución Mensual"])
+
+    # --- PESTAÑA 1: RELOJES ---
+    with tab_resumen:
+        st.write("### Estado Actual vs Objetivos Generales")
+        OBJETIVO_SSI = 95.6
+        OBJETIVO_NPS = 87.0
+        
+        ssi_actual = df_filtrado['SSI_Num'].mean()
+        nps_actual = calcular_nps(df_filtrado[col_nps])
+
+        col1, col2 = st.columns(2)
+        def crear_reloj(valor, titulo, objetivo, max_val, color_ok="#2ecc71", color_bad="#e74c3c"):
+            valor = 0 if pd.isna(valor) else valor
+            color_actual = color_ok if valor >= objetivo else color_bad
+            fig = go.Figure(go.Indicator(
+                mode="gauge+number+delta", value=valor,
+                number={'suffix': "%" if "NPS" in titulo else "", 'font': {'size': 40, 'color': color_actual}},
+                delta={'reference': objetivo, 'increasing': {'color': color_ok}, 'decreasing': {'color': color_bad}},
+                title={'text': titulo, 'font': {'size': 20, 'color': '#1E3A8A'}},
+                gauge={'axis': {'range': [None, max_val], 'tickwidth': 1}, 'bar': {'color': color_actual},
+                       'steps': [{'range': [0, objetivo], 'color': '#F1F5F9'}, {'range': [objetivo, max_val], 'color': '#E2E8F0'}],
+                       'threshold': {'line': {'color': "black", 'width': 4}, 'thickness': 0.75, 'value': objetivo}}
+            ))
+            fig.update_layout(height=350, margin=dict(l=20, r=20, t=50, b=20))
+            return fig
+
+        with col1: st.plotly_chart(crear_reloj(ssi_actual, "Indicador SSI (Objetivo: 95.6)", OBJETIVO_SSI, 100), use_container_width=True)
+        with col2: st.plotly_chart(crear_reloj(nps_actual, "Indicador NPS (Objetivo: 87%)", OBJETIVO_NPS, 100), use_container_width=True)
+
+    # --- PESTAÑA 2: RANKING ---
+    with tab_ranking:
+        st.write("### Ranking de Vendedores y Volumen de Encuestas")
+        resumen = []
+        for vend, grupo in df_filtrado.groupby(col_vendedor):
+            resumen.append({'Vendedor': vend, 'Encuestas': len(grupo), 'SSI_Promedio': grupo['SSI_Num'].mean(), 'NPS': calcular_nps(grupo[col_nps])})
+            
+        df_resumen = pd.DataFrame(resumen).sort_values('SSI_Promedio', ascending=False).dropna(subset=['SSI_Promedio'])
+        
+        if not df_resumen.empty:
+            fig_ranking = go.Figure()
+            fig_ranking.add_trace(go.Bar(x=df_resumen['Vendedor'], y=df_resumen['SSI_Promedio'], name='SSI', marker_color='#3498db', text=df_resumen['SSI_Promedio'].apply(lambda x: f"{x:.1f}"), textposition='auto'))
+            fig_ranking.add_trace(go.Bar(x=df_resumen['Vendedor'], y=df_resumen['NPS'], name='NPS (%)', marker_color='#9b59b6', text=df_resumen['NPS'].apply(lambda x: f"{x:.1f}%" if pd.notna(x) else "N/D"), textposition='auto'))
+            fig_ranking.add_trace(go.Scatter(x=df_resumen['Vendedor'], y=df_resumen['Encuestas'], name='Cant. Encuestas', mode='lines+markers+text', yaxis='y2', marker=dict(color='#e67e22', size=12), line=dict(color='#e67e22', dash='dot'), text=df_resumen['Encuestas'], textposition='top center'))
+            
+            fig_ranking.update_layout(barmode='group', xaxis_title="Vendedor", yaxis=dict(title="Puntaje", range=[0, 110]), yaxis2=dict(title="Encuestas", overlaying='y', side='right', range=[0, df_resumen['Encuestas'].max() * 1.5]), template="plotly_white")
+            st.plotly_chart(fig_ranking, use_container_width=True)
+        else:
+            st.warning("No hay datos para mostrar el ranking.")
+
+    # --- PESTAÑA 3: EVOLUCIÓN MENSUAL Y SUBÍNDICES (NUEVA) ---
+    with tab_evolucion:
+        st.write(f"### Desempeño Mensual - Boca de Venta: {boca_sel} | Año: {año_sel}")
+        
+        # Agrupación por Mes
+        if 'Mes_Num' in df_filtrado.columns:
+            df_mensual = df_filtrado.sort_values('Mes_Num').groupby('Mes_Nombre', sort=False)
+        else:
+            df_mensual = df_filtrado.groupby('Mes_Nombre', sort=False)
+
+        resumen_mensual = []
+        for mes, grupo in df_mensual:
+            fila = {
+                'Mes': mes.capitalize(),
+                'Q encuestas': len(grupo),
+                'SSI Puro': grupo['SSI_Num'].mean(),
+                'NPS dealer': calcular_nps(grupo[col_nps])
+            }
+            # Agregar promedios de los subíndices dinámicamente
+            for c in cols_subindices:
+                fila[c] = grupo[c].mean()
+            resumen_mensual.append(fila)
+
+        df_tabla_mensual = pd.DataFrame(resumen_mensual)
+
+        if not df_tabla_mensual.empty:
+            # 1. Gráfico de Evolución Relacionado
+            fig_evolucion = go.Figure()
+            fig_evolucion.add_trace(go.Scatter(x=df_tabla_mensual['Mes'], y=df_tabla_mensual['SSI Puro'], mode='lines+markers+text', name='SSI Puro', line=dict(color='#1E3A8A', width=3), marker=dict(size=10), text=df_tabla_mensual['SSI Puro'].apply(lambda x: f"{x:.1f}"), textposition='top center'))
+            fig_evolucion.add_trace(go.Scatter(x=df_tabla_mensual['Mes'], y=df_tabla_mensual['NPS dealer'], mode='lines+markers+text', name='NPS dealer', line=dict(color='#2ecc71', width=3), marker=dict(size=10), text=df_tabla_mensual['NPS dealer'].apply(lambda x: f"{x:.1f}%" if pd.notna(x) else ""), textposition='bottom center'))
+            
+            fig_evolucion.update_layout(title="Evolución de SSI y NPS por Mes", xaxis_title="Mes", yaxis_title="Puntaje / Porcentaje", yaxis_range=[0, 110], template="plotly_white", hovermode="x unified")
+            st.plotly_chart(fig_evolucion, use_container_width=True)
+
+            # 2. Tabla de Datos Formateada
+            st.write("#### Cuadro de Mando Mensual y Subíndices")
+            
+            # Fila de Totales
+            totales = {
+                'Mes': 'Total',
+                'Q encuestas': df_tabla_mensual['Q encuestas'].sum(),
+                'SSI Puro': df_filtrado['SSI_Num'].mean(),
+                'NPS dealer': calcular_nps(df_filtrado[col_nps])
+            }
+            for c in cols_subindices:
+                totales[c] = df_filtrado[c].mean()
+                
+            df_tabla_mensual.loc[len(df_tabla_mensual)] = totales
+
+            # Formateo visual para la tabla
+            formatos = {'Q encuestas': '{:.0f}', 'SSI Puro': '{:.1f}', 'NPS dealer': '{:.1f}%'}
+            for c in cols_subindices:
+                formatos[c] = '{:.1f}'
+
+            st.dataframe(
+                df_tabla_mensual.style.format(formatos, na_rep="-").apply(
+                    lambda x: ['font-weight: bold; background-color: #f0f2f6' if x['Mes'] == 'Total' else '' for i in x], axis=1
+                ),
+                use_container_width=True,
+                hide_index=True
+            )
+        else:
+            st.warning("No hay datos registrados para los filtros seleccionados.")
+
+else:
+    st.warning("No se pudo leer la hoja VENTAS26 o está vacía.")
