@@ -1,252 +1,228 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import numpy as np
 
 # 1. Configuración de la página del Dashboard
 st.set_page_config(
-    page_title="Dashboard Mystery Interno - Autolux",
-    page_icon="📊",
+    page_title="Dashboard SSI y NPS - Autolux",
+    page_icon="🎯",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Estilos estéticos personalizados
 st.markdown("""
     <style>
-    .main-title {
-        font-size: 28px;
-        font-weight: bold;
-        color: #1E3A8A;
-        margin-bottom: 5px;
-    }
-    .subtitle {
-        font-size: 14px;
-        color: #555555;
-        margin-bottom: 25px;
-    }
-    .metric-box {
-        background-color: #F8FAFC;
-        padding: 15px;
-        border-radius: 8px;
-        border-left: 5px solid #1E3A8A;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-    }
+    .main-title { font-size: 28px; font-weight: bold; color: #1E3A8A; margin-bottom: 5px; }
+    .subtitle { font-size: 14px; color: #555555; margin-bottom: 25px; }
     </style>
 """, unsafe_allow_html=True)
 
-st.markdown('<div class="main-title">📊 Panel de Control: Mystery Interno - Autolux</div>', unsafe_allow_html=True)
-st.markdown('<div class="subtitle">Análisis de auditorías de calidad, rendimiento de asesores y evolución histórica</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-title">🎯 Tablero de Gestión: SSI y NPS - VENTAS</div>', unsafe_allow_html=True)
+st.markdown('<div class="subtitle">Seguimiento de Satisfacción y Lealtad del Cliente frente a Objetivos</div>', unsafe_allow_html=True)
 
-# 2. Enlace público
-SHEET_URL = "https://docs.google.com/spreadsheets/d/1_OCxCakgSVU0DRibdT2ZcsgtCK1YDjmDthePt_pr5Xo/edit?usp=sharing"
+# 2. Conexión de Datos a la hoja "VENTAS26"
+SHEET_ID = "1PGoOlFTN2WuuiEqRk0KPrcLZL6pEcFVeNWo35shsUSA"
+SHEET_NAME = "VENTAS26"
+# Utilizamos la API gviz de Google para traer directamente la pestaña especificada en formato CSV
+CSV_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={SHEET_NAME}"
 
-@st.cache_data(ttl=600)  # Se actualiza cada 10 minutos automáticamente
-def cargar_datos_desde_enlace(url):
-    if "/edit" in url:
-        csv_url = url.split("/edit")[0] + "/export?format=csv"
-    else:
-        csv_url = url
-    
+@st.cache_data(ttl=600)
+def cargar_datos(url):
     try:
-        df = pd.read_csv(csv_url)
+        df = pd.read_csv(url)
         df.columns = [str(col).strip() for col in df.columns]
         return df
     except Exception as e:
-        st.error(f"Error al conectar con la base de datos de Google Sheets: {e}")
+        st.error(f"Error al conectar con la base de datos: {e}")
         return pd.DataFrame()
 
-# Carga efectiva de los datos
-df_raw = cargar_datos_desde_enlace(SHEET_URL)
+df_raw = cargar_datos(CSV_URL)
 
 if not df_raw.empty:
     columnas_disponibles = df_raw.columns.tolist()
     
-    # Buscador inteligente de columnas predeterminadas
-    col_vendedor = next((c for c in columnas_disponibles if c.lower() in ['vendedor', 'asesor']), None)
-    col_q2 = next((c for c in columnas_disponibles if c.lower() == 'q2'), None)
-    col_sucursal = next((c for c in columnas_disponibles if c.lower() in ['sucursal', 'agencia', 'filial']), None)
-    col_fecha = next((c for c in columnas_disponibles if c.lower() in ['fecha', 'fecha y hora', 'mes']), None)
-    
-    # Configuración de Columnas en la barra lateral
+    # 3. Detección Inteligente de Columnas
     st.sidebar.header("⚙️ Configuración de Columnas")
     
-    vendedor_seleccionado = st.sidebar.selectbox(
-        "Columna Vendedor:", columnas_disponibles, 
-        index=columnas_disponibles.index(col_vendedor) if col_vendedor else 0
-    )
-    q2_seleccionado = st.sidebar.selectbox(
-        "Columna Indicador Principal (Q2):", columnas_disponibles, 
-        index=columnas_disponibles.index(col_q2) if col_q2 else 0
-    )
-    sucursal_seleccionada = st.sidebar.selectbox(
-        "Columna Sucursal:", columnas_disponibles, 
-        index=columnas_disponibles.index(col_sucursal) if col_sucursal else 0
-    )
-    fecha_seleccionada = st.sidebar.selectbox(
-        "Columna de Fecha/Tiempo:", columnas_disponibles, 
-        index=columnas_disponibles.index(col_fecha) if col_fecha else 0
-    )
+    # NPS -> Última columna según instrucción
+    col_nps = columnas_disponibles[-1]
+    
+    # Buscar columna Vendedor
+    col_vend_detectada = next((c for c in columnas_disponibles if 'vendedor' in c.lower() or 'asesor' in c.lower()), columnas_disponibles[0])
+    col_vendedor = st.sidebar.selectbox("Columna Vendedor:", columnas_disponibles, index=columnas_disponibles.index(col_vend_detectada))
+    
+    # Buscar columna SSI
+    col_ssi_detectada = next((c for c in columnas_disponibles if 'ssi' in c.lower()), columnas_disponibles[0])
+    col_ssi = st.sidebar.selectbox("Columna SSI:", columnas_disponibles, index=columnas_disponibles.index(col_ssi_detectada))
+    
+    # Buscar columna Fecha / Mes
+    col_fecha_detectada = next((c for c in columnas_disponibles if 'fecha' in c.lower() or 'mes' in c.lower() or 'periodo' in c.lower()), columnas_disponibles[0])
+    col_fecha = st.sidebar.selectbox("Columna Periodo (Fecha/Mes):", columnas_disponibles, index=columnas_disponibles.index(col_fecha_detectada))
 
-    # 3. Limpieza y normalización de la métrica Q2
     df_procesado = df_raw.copy()
     
-    def normalizar_metrica(val):
-        if pd.isna(val):
-            return np.nan
-        val_str = str(val).strip().lower()
-        if val_str in ['cumple', 'cumplido', 'si', 'sí', 'correcto']:
-            return 100.0
-        elif val_str in ['no cumple', 'no cumplido', 'no', 'incorrecto']:
-            return 0.0
-        elif val_str in ['parcial', 'parcialmente', 'parcialmente cumplido']:
-            return 50.0
-        elif val_str in ['n/a', 'na', 'no aplica']:
-            return np.nan
-        try:
-            val_num = float(val_str.replace('%', '').replace(',', '.'))
-            if val_num <= 1.0 and val_num > 0.0:
-                return val_num * 100.0
-            return val_num
-        except ValueError:
-            return np.nan
-
-    df_procesado['Q2_Final'] = df_procesado[q2_seleccionado].apply(normalizar_metrica)
-    
-    # 4. Procesamiento de Fechas para el Histórico
+    # Preparar Fechas (Periodos por Mes)
     try:
-        # Intentamos convertir la columna seleccionada a formato fecha
-        df_procesado['Fecha_Clean'] = pd.to_datetime(df_procesado[fecha_seleccionada], errors='coerce')
-        # Si la conversión funciona, extraemos Año, Mes y una etiqueta para el eje X (YYYY-MM)
-        df_procesado['Año'] = df_procesado['Fecha_Clean'].dt.year
-        df_procesado['Mes_Num'] = df_procesado['Fecha_Clean'].dt.month
-        df_procesado['Año-Mes'] = df_procesado['Fecha_Clean'].dt.strftime('%Y-%m')
-    except Exception:
-        # Si la columna ya viene como texto de meses/años directamente, la dejamos como está
-        df_procesado['Año-Mes'] = df_procesado[fecha_seleccionada].astype(str)
-        df_procesado['Año'] = "N/D"
-        df_procesado['Mes_Num'] = 1
+        df_procesado['Mes_Período'] = pd.to_datetime(df_procesado[col_fecha], errors='coerce').dt.strftime('%Y-%m')
+        df_procesado['Mes_Período'] = df_procesado['Mes_Período'].fillna(df_procesado[col_fecha].astype(str))
+    except:
+        df_procesado['Mes_Período'] = df_procesado[col_fecha].astype(str)
 
-    # Filtros globales en la barra lateral
-    st.sidebar.header("🔍 Filtros Generales")
+    # Función robusta para calcular NPS
+    def calcular_nps(serie):
+        if len(serie.dropna()) == 0: return 0.0
+        
+        # Intentar convertir a numérico (escalas 0-10)
+        serie_num = pd.to_numeric(serie, errors='coerce')
+        if serie_num.notna().sum() > 0:
+            promotores = (serie_num >= 9).sum()
+            detractores = (serie_num <= 6).sum()
+            total = serie_num.notna().sum()
+            return (promotores - detractores) / total * 100.0
+        else:
+            # Si es texto (Promotor, Detractor, Pasivo)
+            s_str = serie.astype(str).str.lower()
+            promotores = s_str.str.contains('promotor').sum()
+            detractores = s_str.str.contains('detractor').sum()
+            total = len(s_str.replace(['nan', 'none', ''], pd.NA).dropna())
+            if total == 0: return 0.0
+            return (promotores - detractores) / total * 100.0
+
+    # Limpiar SSI a numérico
+    df_procesado['SSI_Num'] = pd.to_numeric(df_procesado[col_ssi].astype(str).str.replace(',', '.').str.replace('%', ''), errors='coerce')
+
+    # 4. Filtros Globales (Meses y Vendedores)
+    st.sidebar.header("🔍 Filtros de Visualización")
     
-    todas_sucursales = sorted(df_procesado[sucursal_seleccionada].dropna().unique().tolist())
-    sucursales_filtradas = st.sidebar.multiselect("Filtrar por Sucursal:", options=todas_sucursales, default=todas_sucursales)
+    meses_disp = sorted(df_procesado['Mes_Período'].unique().tolist())
+    meses_sel = st.sidebar.multiselect("Periodo (Mes):", meses_disp, default=meses_disp)
     
-    todos_vendedores = sorted(df_procesado[df_procesado[sucursal_seleccionada].isin(sucursales_filtradas)][vendedor_seleccionado].dropna().unique().tolist())
-    vendedores_filtrados = st.sidebar.multiselect("Filtrar por Vendedor:", options=todos_vendedores, default=todos_vendedores)
-    
-    # Aplicación de filtros al set de datos activo
+    vendedores_disp = sorted(df_procesado[df_procesado['Mes_Período'].isin(meses_sel)][col_vendedor].dropna().unique().tolist())
+    vendedores_sel = st.sidebar.multiselect("Vendedores:", vendedores_disp, default=vendedores_disp)
+
+    # Aplicar filtros a los datos
     df_filtrado = df_procesado[
-        (df_procesado[sucursal_seleccionada].isin(sucursales_filtradas)) & 
-        (df_procesado[vendedor_seleccionado].isin(vendedores_filtrados))
+        (df_procesado['Mes_Período'].isin(meses_sel)) & 
+        (df_procesado[col_vendedor].isin(vendedores_sel))
     ]
 
-    # 5. Estructura de Pestañas (Se agrega la pestaña histórica)
-    tab_resumen, tab_vendedores, tab_historico = st.tabs([
-        "📋 Resumen General", 
-        "👥 Pestaña de Vendedores", 
-        "📈 Evolución Histórica"
-    ])
+    # 5. Cálculos de Objetivos Generales
+    OBJETIVO_SSI = 95.6
+    OBJETIVO_NPS = 87.0
     
-    # --- PESTAÑA 1: RESUMEN GENERAL ---
-    with tab_resumen:
-        st.write("### 📈 Métricas Consolidadas de la Operación")
-        total_auditorias = len(df_filtrado)
-        promedio_q2_global = df_filtrado['Q2_Final'].mean()
-        
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            st.markdown(f'<div class="metric-box"><span style="color:#555; font-size:13px; font-weight:bold;">TOTAL AUDITORÍAS</span><br><span style="font-size:26px; font-weight:bold; color:#1E3A8A;">{total_auditorias}</span></div>', unsafe_allow_html=True)
-        with c2:
-            val_q2_str = f"{promedio_q2_global:.1f}%" if not pd.isna(promedio_q2_global) else "N/D"
-            st.markdown(f'<div class="metric-box"><span style="color:#555; font-size:13px; font-weight:bold;">CUMPLIMIENTO PROMEDIO Q2</span><br><span style="font-size:26px; font-weight:bold; color:#2ECC71;">{val_q2_str}</span></div>', unsafe_allow_html=True)
-        with c3:
-            muestras_con_nota = df_filtrado['Q2_Final'].dropna()
-            val_opt_str = f"{(muestras_con_nota >= 90).sum() / len(muestras_con_nota) * 100:.1f}%" if len(muestras_con_nota) > 0 else "N/D"
-            st.markdown(f'<div class="metric-box"><span style="color:#555; font-size:13px; font-weight:bold;">ÍNDICE DE EXCELENCIA (≥90%)</span><br><span style="font-size:26px; font-weight:bold; color:#0284C7;">{val_opt_str}</span></div>', unsafe_allow_html=True)
-            
-        st.write("---")
-        st.write("#### 📑 Registro de Datos Completo")
-        st.dataframe(df_raw, use_container_width=True)
+    ssi_actual = df_filtrado['SSI_Num'].mean()
+    nps_actual = calcular_nps(df_filtrado[col_nps])
 
-    # --- PESTAÑA 2: VENDEDORES ---
-    with tab_vendedores:
-        st.write("### 📊 Rendimiento Individual del Equipo de Ventas")
-        df_agrupado = df_filtrado.groupby(vendedor_seleccionado, as_index=False)['Q2_Final'].mean().dropna(subset=['Q2_Final'])
+    # 6. Relojes / Indicadores (Gauges)
+    st.write("### ⏱️ Estado Actual vs Objetivos")
+    col1, col2 = st.columns(2)
+    
+    def crear_reloj(valor, titulo, objetivo, max_val, color_ok="#2ecc71", color_bad="#e74c3c"):
+        valor = 0 if pd.isna(valor) else valor
+        color_actual = color_ok if valor >= objetivo else color_bad
         
-        if not df_agrupado.empty:
-            def determinar_color_por_rango(porcentaje):
-                if porcentaje >= 90.0: return "#2ecc71"
-                elif porcentaje >= 80.0: return "#f39c12"
-                else: return "#e74c3c"
-            
-            df_agrupado['Color_Asignado'] = df_agrupado['Q2_Final'].apply(determinar_color_por_rango)
-            df_agrupado = df_agrupado.sort_values(by='Q2_Final', ascending=False)
-            
-            fig_bar = px.bar(
-                df_agrupado, x=vendedor_seleccionado, y='Q2_Final',
-                title=f"Cumplimiento del Indicador Principal ({q2_seleccionado}) por Asesor",
-                labels={vendedor_seleccionado: "Asesor de Ventas", 'Q2_Final': "Porcentaje de Cumplimiento (%)"},
-                text='Q2_Final'
-            )
-            fig_bar.update_traces(marker_color=df_agrupado['Color_Asignado'], texttemplate='%{text:.1f}%', textposition='outside', cliponaxis=False)
-            fig_bar.update_layout(yaxis_range=[0, 115], template="plotly_white")
-            st.plotly_chart(fig_bar, use_container_width=True)
-            
-            st.write("#### 🏆 Tabla de Posiciones")
-            df_ranking = df_agrupado[[vendedor_seleccionado, 'Q2_Final']].copy()
-            df_ranking.columns = ["Asesor de Ventas", "Promedio Indicador Q2 (%)"]
-            st.dataframe(df_ranking.style.format({"Promedio Indicador Q2 (%)": "{:.2f}%"}), use_container_width=True, hide_index=True)
-        else:
-            st.warning("⚠️ No hay datos suficientes para calcular las métricas por vendedor.")
+        fig = go.Figure(go.Indicator(
+            mode="gauge+number+delta",
+            value=valor,
+            number={'suffix': "%" if "NPS" in titulo else "", 'font': {'size': 40, 'color': color_actual}},
+            delta={'reference': objetivo, 'increasing': {'color': color_ok}, 'decreasing': {'color': color_bad}},
+            title={'text': titulo, 'font': {'size': 20, 'color': '#1E3A8A'}},
+            gauge={
+                'axis': {'range': [None, max_val], 'tickwidth': 1},
+                'bar': {'color': color_actual},
+                'bgcolor': "white",
+                'borderwidth': 2,
+                'bordercolor': "gray",
+                'steps': [
+                    {'range': [0, objetivo], 'color': '#F1F5F9'},
+                    {'range': [objetivo, max_val], 'color': '#E2E8F0'}
+                ],
+                'threshold': {
+                    'line': {'color': "black", 'width': 4},
+                    'thickness': 0.75,
+                    'value': objetivo
+                }
+            }
+        ))
+        fig.update_layout(height=350, margin=dict(l=20, r=20, t=50, b=20))
+        return fig
 
-    # --- PESTAÑA 3: EVOLUCIÓN HISTÓRICA (NUEVA NUEVA NUEVA) ---
-    with tab_historico:
-        st.write("### 📈 Línea de Tendencia Temporal e Histórica")
-        
-        # Agrupamos por Sucursal, Año-Mes (y columnas de orden) para promediar el cumplimiento
-        # Mantenemos las columnas de ordenamiento para asegurar que la gráfica no se desfase en el tiempo
-        df_hist = df_filtrado.groupby([sucursal_seleccionada, 'Año-Mes'], as_index=False)['Q2_Final'].mean()
-        df_hist = df_hist.dropna(subset=['Q2_Final']).sort_values(by='Año-Mes')
-        
-        if not df_hist.empty:
-            # Gráfico de líneas histórico multivariable
-            fig_line = px.line(
-                df_hist,
-                x='Año-Mes',
-                y='Q2_Final',
-                color=sucursal_seleccionada,
-                title=f"Evolución Histórica del % de Cumplimiento ({q2_seleccionado}) por Sucursal",
-                labels={'Año-Mes': "Línea Temporal (Año - Mes)", 'Q2_Final': "Porcentaje de Cumplimiento (%)", sucursal_seleccionada: "Sucursal"},
-                markers=True # Añade puntos en cada mes para que sea claro el dato exacto
-            )
-            
-            # Ajustes visuales de la línea temporal
-            fig_line.update_traces(
-                line=dict(width=3), 
-                marker=dict(size=8),
-                texttemplate='%{y:.1f}%',
-                textposition='top center'
-            )
-            
-            fig_line.update_layout(
-                yaxis_range=[0, 110],
-                xaxis_title="Período Auditoría",
-                yaxis_title="Porcentaje Promedio (%)",
-                template="plotly_white",
-                hovermode="x unified" # Muestra los valores de todas las sucursales al pasar el mouse por el mismo mes
-            )
-            
-            st.plotly_chart(fig_line, use_container_width=True)
-            
-            # Tabla de desglose de datos para auditorías más profundas
-            st.write("#### 🔍 Matriz de Cumplimiento Histórico")
-            df_pivot = df_hist.pivot(index=sucursal_seleccionada, columns='Año-Mes', values='Q2_Final')
-            st.dataframe(df_pivot.style.format("{:.1f}%", na_rep="-"), use_container_width=True)
-            
-        else:
-            st.warning("⚠️ No se pudieron generar métricas temporales. Verifica que la columna seleccionada contenga fechas válidas o texto con formato de meses.")
+    with col1:
+        st.plotly_chart(crear_reloj(ssi_actual, "Indicador SSI (Objetivo: 95.6)", OBJETIVO_SSI, 100), use_container_width=True)
+    with col2:
+        st.plotly_chart(crear_reloj(nps_actual, "Indicador NPS (Objetivo: 87%)", OBJETIVO_NPS, 100), use_container_width=True)
 
+    st.write("---")
+    
+    # 7. Ranking de Vendedores y Cantidad de Encuestas
+    st.write("### 🏆 Ranking de Vendedores y Volumen de Encuestas")
+    
+    resumen = []
+    for vend, grupo in df_filtrado.groupby(col_vendedor):
+        resumen.append({
+            'Vendedor': vend,
+            'Encuestas': len(grupo),
+            'SSI_Promedio': grupo['SSI_Num'].mean(),
+            'NPS': calcular_nps(grupo[col_nps])
+        })
+        
+    df_resumen = pd.DataFrame(resumen).sort_values('SSI_Promedio', ascending=False).dropna(subset=['SSI_Promedio'])
+    
+    if not df_resumen.empty:
+        # Gráfico Combinado (Barras agrupadas + Línea para conteo)
+        fig_ranking = go.Figure()
+        
+        # Barra para SSI
+        fig_ranking.add_trace(go.Bar(
+            x=df_resumen['Vendedor'], y=df_resumen['SSI_Promedio'],
+            name='SSI Promedio', marker_color='#3498db',
+            text=df_resumen['SSI_Promedio'].apply(lambda x: f"{x:.1f}"), textposition='auto'
+        ))
+        
+        # Barra para NPS
+        fig_ranking.add_trace(go.Bar(
+            x=df_resumen['Vendedor'], y=df_resumen['NPS'],
+            name='NPS (%)', marker_color='#9b59b6',
+            text=df_resumen['NPS'].apply(lambda x: f"{x:.1f}%"), textposition='auto'
+        ))
+        
+        # Línea de puntos para Cantidad de Encuestas (Eje secundario)
+        fig_ranking.add_trace(go.Scatter(
+            x=df_resumen['Vendedor'], y=df_resumen['Encuestas'],
+            name='Cant. Encuestas', mode='lines+markers+text',
+            yaxis='y2', marker=dict(color='#e67e22', size=12, symbol='diamond'),
+            line=dict(color='#e67e22', width=3, dash='dot'),
+            text=df_resumen['Encuestas'], textposition='top center',
+            textfont=dict(color='#d35400', size=14, weight='bold')
+        ))
+        
+        fig_ranking.update_layout(
+            barmode='group',
+            xaxis_title="Vendedor / Asesor",
+            yaxis=dict(title="Puntaje / Porcentaje", range=[0, max(110, df_resumen['SSI_Promedio'].max() * 1.1)]),
+            yaxis2=dict(
+                title="Cantidad de Encuestas", overlaying='y', side='right',
+                range=[0, df_resumen['Encuestas'].max() * 1.5], showgrid=False
+            ),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            template="plotly_white",
+            margin=dict(t=80)
+        )
+        
+        st.plotly_chart(fig_ranking, use_container_width=True)
+        
+        # Tabla resumen inferior
+        st.write("#### 📑 Datos Detallados por Vendedor")
+        st.dataframe(
+            df_resumen.style.format({
+                'SSI_Promedio': "{:.1f}",
+                'NPS': "{:.1f}%"
+            }).background_gradient(subset=['SSI_Promedio', 'NPS'], cmap='Blues'),
+            use_container_width=True, hide_index=True
+        )
+    else:
+        st.warning("No hay suficientes datos para generar el ranking con los filtros aplicados.")
 else:
-    st.warning("⚠️ No se pudieron extraer datos de la URL provista.")
+    st.warning("No se pudo leer la hoja VENTAS26 o está vacía. Verifica el enlace y los permisos.")
