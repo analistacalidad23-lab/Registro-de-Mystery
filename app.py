@@ -25,19 +25,24 @@ def cargar_datos():
         st.error(f"Error al cargar los datos: {e}")
         return pd.DataFrame()
 
-# Función para calcular el NPS a partir de las categorías de texto
+# Función para calcular el NPS con la fórmula exacta solicitada
 def calcular_nps(series):
     # Estandarizamos los textos a minúsculas sin espacios extra
     s = series.astype(str).str.strip().str.lower()
-    promotores = (s == 'promotor').sum()
-    detractores = (s == 'detractor').sum()
     
-    # Contamos solo los válidos
-    total = s.isin(['promotor', 'neutro', 'detractor']).sum()
+    promotor = (s == 'promotor').sum()
+    neutro = (s == 'neutro').sum()
+    detractor = (s == 'detractor').sum()
+    
+    total = promotor + neutro + detractor
     
     if total == 0: 
         return 0.0
-    return ((promotores / total) - (detractores / total)) * 100
+        
+    # NPS = (PROMOTOR - DETRACTOR) / (PROMOTOR + NEUTRO + DETRACTOR)
+    # Lo multiplicamos por 100 para visualizarlo en formato porcentaje en el tablero
+    nps = ((promotor - detractor) / total) * 100
+    return nps
 
 df = cargar_datos()
 
