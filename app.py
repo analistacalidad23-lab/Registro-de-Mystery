@@ -13,6 +13,11 @@ URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=xlsx"
 def cargar_datos():
     try:
         df = pd.read_excel(URL, sheet_name="VENTAS26")
+        
+        # Limpieza: eliminamos columnas completamente vacías o "Unnamed" que a veces se generan al exportar
+        df = df.dropna(axis=1, how='all')
+        df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
+        
         df['Fecha de encuesta'] = pd.to_datetime(df['Fecha de encuesta'], errors='coerce')
         df['Mes_Año'] = df['Fecha de encuesta'].dt.to_period('M').astype(str)
         return df
@@ -37,12 +42,11 @@ def calcular_nps(series):
 df = cargar_datos()
 
 if not df.empty:
+    # Nos aseguramos de tomar la última columna real y válida con datos
     col_nps = df.columns[-1] 
     
-    # Aseguramos que SSI sea numérico por seguridad
     df['SSI'] = pd.to_numeric(df['SSI'], errors='coerce')
     
-    # Si existe la columna Q2, la forzamos a numérica
     if 'Q2' in df.columns:
         df['Q2'] = pd.to_numeric(df['Q2'], errors='coerce')
     
@@ -65,7 +69,6 @@ if not df.empty:
     # --- KPIs PRINCIPALES ---
     st.subheader("Rendimiento Global vs Objetivos")
     
-    # Aplicamos la nueva función al cálculo global
     nps_promedio = calcular_nps(df_filtrado[col_nps]) if not df_filtrado.empty else 0
     ssi_promedio = df_filtrado['SSI'].mean() if not df_filtrado.empty else 0
     
@@ -90,7 +93,6 @@ if not df.empty:
     st.subheader("Análisis Detallado")
     
     if not df_filtrado.empty:
-        # Pestañas integradas para los datos generales y el desempeño del equipo
         tab1, tab2, tab3 = st.tabs(["Tabla de Datos", "Gráfico Histórico", "Vendedores"])
         
         def obtener_color_grafico(valor):
@@ -109,12 +111,11 @@ if not df.empty:
                     return 'color: #721c24; background-color: #f8d7da'
             return ''
         
-        # TAB 1: Tabla General
         with tab1:
             df_agrupado = df_filtrado.groupby('Mes_Año').agg(
                 Q_encuestas=('Fecha de encuesta', 'count'),
                 SSI_Promedio=('SSI', 'mean'),
-                NPS_Promedio=(col_nps, calcular_nps),  # Usamos la función personalizada
+                NPS_Promedio=(col_nps, calcular_nps),
                 Instalaciones=('01 - Instalaciones', 'mean'),
                 Atencion_Vendedor=('02 - Atencion Vendedor', 'mean'),
                 Atencion_Administracion=('03 - Atencion Administracion', 'mean'),
@@ -132,7 +133,6 @@ if not df.empty:
                 use_container_width=True
             )
             
-        # TAB 2: Gráfico Histórico
         with tab2:
             fig = go.Figure()
             
@@ -168,7 +168,6 @@ if not df.empty:
             )
             st.plotly_chart(fig, use_container_width=True)
         
-        # TAB 3: Evaluación de Vendedores
         with tab3:
             st.write("### NPS por Vendedor y Periodo")
             
@@ -177,7 +176,6 @@ if not df.empty:
                     NPS=(col_nps, calcular_nps)
                 ).reset_index()
                 
-                # Pivotamos para que los meses sean las columnas
                 pivot_nps = nps_vendedor.pivot(index='Vendedor', columns='Mes_Año', values='NPS')
                 st.dataframe(pivot_nps.style.format("{:.1f}", na_rep="-").map(colorear_porcentaje), use_container_width=True)
                 
