@@ -95,10 +95,10 @@ if not df_raw.empty:
     for c in cols_subindices:
         df_procesado[c] = pd.to_numeric(df_procesado[c].astype(str).str.replace(',', '.').str.replace('%', ''), errors='coerce')
 
-    # Detectar dinámicamente la columna "Atencion Vendedor"
+    # Detectar dinámicamente la columna "Atencion Vendedor" para las comisiones
     col_atencion_vend = next((c for c in cols_subindices if 'atencion' in c.lower() and 'vendedor' in c.lower()), None)
     if not col_atencion_vend:
-        col_atencion_vend = next((c for c in cols_subindices if '02' in c), None)
+        col_atencion_vend = next((c for c in cols_subindices if '02' in c), None) # Fallback al prefijo 02
 
     # 4. Filtros Globales en Barra Lateral
     st.sidebar.header("🔍 Filtros de Visualización")
@@ -188,12 +188,7 @@ if not df_raw.empty:
         resumen_mensual = []
         for mes, grupo in df_mensual:
             fila = {'Mes': mes.capitalize(), 'Q encuestas': len(grupo), 'SSI Puro': grupo['SSI_Num'].mean(), 'NPS dealer': calcular_nps(grupo[col_nps])}
-            for c in cols_subindices: 
-                # Corrección puntual: Si es la columna de Atención al Vendedor, se multiplica por 10
-                if c == col_atencion_vend:
-                    fila[c] = grupo[c].mean() * 10
-                else:
-                    fila[c] = grupo[c].mean()
+            for c in cols_subindices: fila[c] = grupo[c].mean()
             resumen_mensual.append(fila)
 
         df_tabla_mensual = pd.DataFrame(resumen_mensual)
@@ -205,20 +200,14 @@ if not df_raw.empty:
             st.plotly_chart(fig_evolucion, use_container_width=True)
 
             totales = {'Mes': 'Total', 'Q encuestas': df_tabla_mensual['Q encuestas'].sum(), 'SSI Puro': df_filtrado['SSI_Num'].mean(), 'NPS dealer': calcular_nps(df_filtrado[col_nps])}
-            for c in cols_subindices: 
-                # Corrección puntual también en los promedios totales
-                if c == col_atencion_vend:
-                    totales[c] = df_filtrado[c].mean() * 10
-                else:
-                    totales[c] = df_filtrado[c].mean()
-                    
+            for c in cols_subindices: totales[c] = df_filtrado[c].mean()
             df_tabla_mensual.loc[len(df_tabla_mensual)] = totales
 
             formatos = {'Q encuestas': '{:.0f}', 'SSI Puro': '{:.1f}', 'NPS dealer': '{:.1f}%'}
             for c in cols_subindices: formatos[c] = '{:.1f}'
             st.dataframe(df_tabla_mensual.style.format(formatos, na_rep="-").apply(lambda x: ['font-weight: bold; background-color: #f0f2f6' if x['Mes'] == 'Total' else '' for i in x], axis=1), use_container_width=True, hide_index=True)
 
-    # --- PESTAÑA 4: COMISIONES Y LIQUIDACIÓN ---
+    # --- PESTAÑA 4: COMISIONES Y LIQUIDACIÓN (NUEVA) ---
     with tab_comisiones:
         st.write("### 💰 Tabla de Cálculo de Comisiones SSI")
         st.info("💡 Utiliza los filtros de Mes y Año de la barra lateral para liquidar las comisiones de un período específico.")
@@ -233,6 +222,7 @@ if not df_raw.empty:
                 ssi_promedio = grupo['SSI_Num'].mean()
                 atencion_promedio = grupo[col_atencion_vend].mean()
                 
+                # Lógica de cálculo de comisión estricta
                 if pd.isna(atencion_promedio):
                     comision = 0.00
                 elif atencion_promedio < 95.6:
@@ -251,12 +241,14 @@ if not df_raw.empty:
             df_comisiones = pd.DataFrame(datos_comision)
             
             if not df_comisiones.empty:
+                # Ordenamos de mayor a menor por Atención del Vendedor
                 df_comisiones = df_comisiones.sort_values('Atención del Vendedor', ascending=False)
                 
+                # Formateo de la tabla (Colores dependiendo del resultado de la comisión)
                 def aplicar_colores_comision(val):
-                    if val == -0.05: return 'color: #e74c3c; font-weight: bold;'
-                    elif val == 0.01: return 'color: #2ecc71; font-weight: bold;'
-                    return 'color: #7f8c8d;'
+                    if val == -0.05: return 'color: #e74c3c; font-weight: bold;'  # Rojo
+                    elif val == 0.01: return 'color: #2ecc71; font-weight: bold;' # Verde
+                    return 'color: #7f8c8d;' # Gris para 0
                 
                 st.dataframe(
                     df_comisiones.style
