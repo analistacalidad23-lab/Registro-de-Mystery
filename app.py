@@ -12,9 +12,7 @@ URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=xlsx"
 @st.cache_data(ttl=600)
 def cargar_datos():
     try:
-        # Se necesita la librería openpyxl instalada para leer .xlsx
         df = pd.read_excel(URL, sheet_name="VENTAS26")
-        
         df['Fecha de encuesta'] = pd.to_datetime(df['Fecha de encuesta'], errors='coerce')
         df['Mes_Año'] = df['Fecha de encuesta'].dt.to_period('M').astype(str)
         return df
@@ -22,15 +20,35 @@ def cargar_datos():
         st.error(f"Error al cargar los datos: {e}")
         return pd.DataFrame()
 
+# Función para calcular el NPS a partir de las categorías de texto
+def calcular_nps(series):
+    # Estandarizamos los textos a minúsculas sin espacios extra
+    s = series.astype(str).str.strip().str.lower()
+    promotores = (s == 'promotor').sum()
+    detractores = (s == 'detractor').sum()
+    
+    # Contamos solo los válidos
+    total = s.isin(['promotor', 'neutro', 'detractor']).sum()
+    
+    if total == 0: 
+        return 0.0
+    return ((promotores / total) - (detractores / total)) * 100
+
 df = cargar_datos()
 
 if not df.empty:
     col_nps = df.columns[-1] 
     
+    # Aseguramos que SSI sea numérico por seguridad
+    df['SSI'] = pd.to_numeric(df['SSI'], errors='coerce')
+    
+    # Si existe la columna Q2, la forzamos a numérica
+    if 'Q2' in df.columns:
+        df['Q2'] = pd.to_numeric(df['Q2'], errors='coerce')
+    
     # --- BARRA LATERAL: FILTROS ---
     st.sidebar.header("Filtros")
     
-    # Cambio aplicado: 'Boca de Venta' en lugar de 'Sucursal'
     sucursales = df['Boca de Venta'].dropna().unique().tolist()
     sucursal_seleccionada = st.sidebar.multiselect("Seleccionar Boca de Venta", sucursales, default=sucursales)
     
@@ -47,7 +65,8 @@ if not df.empty:
     # --- KPIs PRINCIPALES ---
     st.subheader("Rendimiento Global vs Objetivos")
     
-    nps_promedio = df_filtrado[col_nps].mean() if not df_filtrado.empty else 0
+    # Aplicamos la nueva función al cálculo global
+    nps_promedio = calcular_nps(df_filtrado[col_nps]) if not df_filtrado.empty else 0
     ssi_promedio = df_filtrado['SSI'].mean() if not df_filtrado.empty else 0
     
     obj_nps = 87.0
@@ -67,33 +86,21 @@ if not df.empty:
         
     st.divider()
 
-    # --- TABLA Y GRÁFICO HISTÓRICO ---
-    st.subheader("Evolución Mensual de Indicadores")
+    # --- TABS DE VISUALIZACIÓN ---
+    st.subheader("Análisis Detallado")
     
     if not df_filtrado.empty:
-        df_agrupado = df_filtrado.groupby('Mes_Año').agg(
-            Q_encuestas=('Fecha de encuesta', 'count'),
-            SSI_Promedio=('SSI', 'mean'),
-            NPS_Promedio=(col_nps, 'mean'),
-            Instalaciones=('01 - Instalaciones', 'mean'),
-            Atencion_Vendedor=('02 - Atencion Vendedor', 'mean'),
-            Atencion_Administracion=('03 - Atencion Administracion', 'mean'),
-            Fecha_Entrega=('04 - Fecha de Entrega', 'mean'),
-            Momento_Entrega=('05 - Momento de Entrega', 'mean')
-        ).reset_index()
-
-        tab1, tab2 = st.tabs(["Tabla de Datos", "Gráfico Histórico"])
+        # Pestañas integradas para los datos generales y el desempeño del equipo
+        tab1, tab2, tab3 = st.tabs(["Tabla de Datos", "Gráfico Histórico", "Vendedores"])
         
         def obtener_color_grafico(valor):
-            if valor >= 90:
-                return '#155724'
-            elif valor >= 80:
-                return '#856404'
-            else:
-                return '#721c24'
+            if pd.isna(valor): return '#cccccc'
+            if valor >= 90: return '#155724'
+            elif valor >= 80: return '#856404'
+            else: return '#721c24'
 
         def colorear_porcentaje(valor):
-            if isinstance(valor, (int, float)):
+            if isinstance(valor, (int, float)) and not pd.isna(valor):
                 if valor >= 90:
                     return 'color: #155724; background-color: #d4edda'
                 elif valor >= 80:
@@ -102,17 +109,30 @@ if not df.empty:
                     return 'color: #721c24; background-color: #f8d7da'
             return ''
         
+        # TAB 1: Tabla General
         with tab1:
+            df_agrupado = df_filtrado.groupby('Mes_Año').agg(
+                Q_encuestas=('Fecha de encuesta', 'count'),
+                SSI_Promedio=('SSI', 'mean'),
+                NPS_Promedio=(col_nps, calcular_nps),  # Usamos la función personalizada
+                Instalaciones=('01 - Instalaciones', 'mean'),
+                Atencion_Vendedor=('02 - Atencion Vendedor', 'mean'),
+                Atencion_Administracion=('03 - Atencion Administracion', 'mean'),
+                Fecha_Entrega=('04 - Fecha de Entrega', 'mean'),
+                Momento_Entrega=('05 - Momento de Entrega', 'mean')
+            ).reset_index()
+
             columnas_formatear = ['SSI_Promedio', 'NPS_Promedio', 'Instalaciones', 
                                   'Atencion_Vendedor', 'Atencion_Administracion', 
                                   'Fecha_Entrega', 'Momento_Entrega']
             
             st.dataframe(
-                df_agrupado.style.format({col: "{:.1f}" for col in columnas_formatear})
+                df_agrupado.style.format({col: "{:.1f}" for col in columnas_formatear}, na_rep="-")
                                  .map(colorear_porcentaje, subset=columnas_formatear),
                 use_container_width=True
             )
             
+        # TAB 2: Gráfico Histórico
         with tab2:
             fig = go.Figure()
             
@@ -122,7 +142,7 @@ if not df.empty:
                 y=df_agrupado['SSI_Promedio'],
                 mode='lines+markers+text',
                 name='SSI Promedio',
-                text=[f"{v:.1f}" for v in df_agrupado['SSI_Promedio']],
+                text=[f"{v:.1f}" if not pd.isna(v) else "" for v in df_agrupado['SSI_Promedio']],
                 textposition="top center",
                 marker=dict(color=colores_ssi, size=12, line=dict(color='white', width=1)),
                 line=dict(color='gray', width=2)
@@ -134,7 +154,7 @@ if not df.empty:
                 y=df_agrupado['NPS_Promedio'],
                 mode='lines+markers+text',
                 name='NPS Promedio',
-                text=[f"{v:.1f}%" for v in df_agrupado['NPS_Promedio']],
+                text=[f"{v:.1f}%" if not pd.isna(v) else "" for v in df_agrupado['NPS_Promedio']],
                 textposition="bottom center",
                 marker=dict(color=colores_nps, size=12, line=dict(color='white', width=1)),
                 line=dict(color='lightgray', width=2, dash='dash')
@@ -146,8 +166,42 @@ if not df.empty:
                 hovermode='x unified',
                 margin=dict(l=20, r=20, t=30, b=20)
             )
-            
             st.plotly_chart(fig, use_container_width=True)
+        
+        # TAB 3: Evaluación de Vendedores
+        with tab3:
+            st.write("### NPS por Vendedor y Periodo")
             
+            if 'Vendedor' in df_filtrado.columns:
+                nps_vendedor = df_filtrado.groupby(['Vendedor', 'Mes_Año']).agg(
+                    NPS=(col_nps, calcular_nps)
+                ).reset_index()
+                
+                # Pivotamos para que los meses sean las columnas
+                pivot_nps = nps_vendedor.pivot(index='Vendedor', columns='Mes_Año', values='NPS')
+                st.dataframe(pivot_nps.style.format("{:.1f}", na_rep="-").map(colorear_porcentaje), use_container_width=True)
+                
+                st.divider()
+                st.write("### Desempeño Comercial (Indicador Q2)")
+                if 'Q2' in df_filtrado.columns:
+                    q2_vendedor = df_filtrado.groupby('Vendedor')['Q2'].mean().reset_index()
+                    colores_q2 = [obtener_color_grafico(v) for v in q2_vendedor['Q2']]
+                    
+                    fig_bars = go.Figure(data=[
+                        go.Bar(
+                            x=q2_vendedor['Vendedor'],
+                            y=q2_vendedor['Q2'],
+                            marker_color=colores_q2,
+                            text=[f"{v:.1f}" if not pd.isna(v) else "" for v in q2_vendedor['Q2']],
+                            textposition='auto'
+                        )
+                    ])
+                    fig_bars.update_layout(xaxis_title='Vendedor', yaxis_title='Q2 Promedio', margin=dict(l=20, r=20, t=30, b=20))
+                    st.plotly_chart(fig_bars, use_container_width=True)
+                else:
+                    st.info("💡 La columna 'Q2' no se encontró. Verifica el nombre exacto en tu Excel para habilitar el gráfico de barras.")
+            else:
+                st.info("💡 La columna 'Vendedor' no se encontró. Verifica el nombre exacto en tu Excel para habilitar la tabla.")
+
     else:
         st.warning("No hay datos disponibles para los filtros seleccionados.")
