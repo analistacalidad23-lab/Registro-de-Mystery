@@ -30,14 +30,15 @@ if not df.empty:
     # --- BARRA LATERAL: FILTROS ---
     st.sidebar.header("Filtros")
     
-    sucursales = df['Sucursal'].dropna().unique().tolist()
-    sucursal_seleccionada = st.sidebar.multiselect("Seleccionar Sucursal", sucursales, default=sucursales)
+    # Cambio aplicado: 'Boca de Venta' en lugar de 'Sucursal'
+    sucursales = df['Boca de Venta'].dropna().unique().tolist()
+    sucursal_seleccionada = st.sidebar.multiselect("Seleccionar Boca de Venta", sucursales, default=sucursales)
     
     meses = sorted(df['Mes_Año'].dropna().unique().tolist())
     mes_seleccionado = st.sidebar.multiselect("Seleccionar Mes", meses, default=meses)
     
     df_filtrado = df[
-        (df['Sucursal'].isin(sucursal_seleccionada)) & 
+        (df['Boca de Venta'].isin(sucursal_seleccionada)) & 
         (df['Mes_Año'].isin(mes_seleccionado))
     ]
     
@@ -83,7 +84,6 @@ if not df.empty:
 
         tab1, tab2 = st.tabs(["Tabla de Datos", "Gráfico Histórico"])
         
-        # Función para asignar colores hexagonales a los gráficos
         def obtener_color_grafico(valor):
             if valor >= 90:
                 return '#155724'
@@ -92,7 +92,6 @@ if not df.empty:
             else:
                 return '#721c24'
 
-        # Función para formato condicional de la tabla
         def colorear_porcentaje(valor):
             if isinstance(valor, (int, float)):
                 if valor >= 90:
@@ -117,7 +116,6 @@ if not df.empty:
         with tab2:
             fig = go.Figure()
             
-            # Trazado SSI con colores condicionales en los marcadores
             colores_ssi = [obtener_color_grafico(v) for v in df_agrupado['SSI_Promedio']]
             fig.add_trace(go.Scatter(
                 x=df_agrupado['Mes_Año'],
@@ -130,7 +128,6 @@ if not df.empty:
                 line=dict(color='gray', width=2)
             ))
             
-            # Trazado NPS con colores condicionales en los marcadores
             colores_nps = [obtener_color_grafico(v) for v in df_agrupado['NPS_Promedio']]
             fig.add_trace(go.Scatter(
                 x=df_agrupado['Mes_Año'],
