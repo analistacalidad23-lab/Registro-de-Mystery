@@ -14,8 +14,8 @@ st.set_page_config(
 
 st.markdown("""
     <style>
-    .main-title { font-size: 28px; font-weight: bold; color: #1E3A8A; margin-bottom: 5px; }
-    .subtitle { font-size: 14px; color: #555555; margin-bottom: 25px; }
+    .main-title { font-size: 28px; font-weight: bold; color: #3498db; margin-bottom: 5px; }
+    .subtitle { font-size: 14px; color: #a0a0a0; margin-bottom: 25px; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -67,12 +67,12 @@ def crear_reloj(valor, titulo, objetivo, max_val, color_ok="#2ecc71", color_bad=
         mode="gauge+number+delta", value=valor,
         number={'suffix': "%" if "NPS" in titulo else "", 'font': {'size': 40, 'color': color_actual}},
         delta={'reference': objetivo, 'increasing': {'color': color_ok}, 'decreasing': {'color': color_bad}},
-        title={'text': titulo, 'font': {'size': 20, 'color': '#1E3A8A'}},
+        title={'text': titulo, 'font': {'size': 20}},
         gauge={'axis': {'range': [None, max_val], 'tickwidth': 1}, 'bar': {'color': color_actual},
-               'steps': [{'range': [0, objetivo], 'color': '#F1F5F9'}, {'range': [objetivo, max_val], 'color': '#E2E8F0'}],
-               'threshold': {'line': {'color': "black", 'width': 4}, 'thickness': 0.75, 'value': objetivo}}
+               'steps': [{'range': [0, objetivo], 'color': 'rgba(255,255,255,0.1)'}, {'range': [objetivo, max_val], 'color': 'rgba(255,255,255,0.2)'}],
+               'threshold': {'line': {'color': "white", 'width': 4}, 'thickness': 0.75, 'value': objetivo}}
     ))
-    fig.update_layout(height=350, margin=dict(l=20, r=20, t=50, b=20))
+    fig.update_layout(height=350, margin=dict(l=20, r=20, t=50, b=20), paper_bgcolor="rgba(0,0,0,0)", font={'color': "white"})
     return fig
 
 # Cargar ambos dataframes
@@ -169,11 +169,25 @@ if not df_ventas_raw.empty:
         df_resumen = pd.DataFrame(resumen).sort_values('SSI_Promedio', ascending=False).dropna(subset=['SSI_Promedio'])
         if not df_resumen.empty:
             fig_ranking = go.Figure()
-            fig_ranking.add_trace(go.Bar(x=df_resumen['Vendedor'], y=df_resumen['SSI_Promedio'], name='SSI', marker_color='#3498db', text=df_resumen['SSI_Promedio'].apply(lambda x: f"{x:.1f}"), textposition='auto'))
-            fig_ranking.add_trace(go.Bar(x=df_resumen['Vendedor'], y=df_resumen['NPS'], name='NPS (%)', marker_color='#9b59b6', text=df_resumen['NPS'].apply(lambda x: f"{x:.1f}%" if pd.notna(x) else "N/D"), textposition='auto'))
-            fig_ranking.add_trace(go.Scatter(x=df_resumen['Vendedor'], y=df_resumen['Encuestas'], name='Cant. Encuestas', mode='lines+markers+text', yaxis='y2', marker=dict(color='#e67e22', size=12), line=dict(color='#e67e22', dash='dot'), text=df_resumen['Encuestas'], textposition='top center'))
+            fig_ranking.add_trace(go.Bar(
+                x=df_resumen['Vendedor'], y=df_resumen['SSI_Promedio'], name='SSI', marker_color='#3498db', 
+                text=df_resumen['SSI_Promedio'].apply(lambda x: f"<b>{x:.1f}</b>"), textposition='auto', textfont=dict(color='white')
+            ))
+            fig_ranking.add_trace(go.Bar(
+                x=df_resumen['Vendedor'], y=df_resumen['NPS'], name='NPS (%)', marker_color='#9b59b6', 
+                text=df_resumen['NPS'].apply(lambda x: f"<b>{x:.1f}%</b>" if pd.notna(x) else "N/D"), textposition='auto', textfont=dict(color='white')
+            ))
+            fig_ranking.add_trace(go.Scatter(
+                x=df_resumen['Vendedor'], y=df_resumen['Encuestas'], name='Cant. Encuestas', mode='lines+markers+text', 
+                yaxis='y2', marker=dict(color='#e67e22', size=12), line=dict(color='#e67e22', dash='dot'), 
+                text=df_resumen['Encuestas'].apply(lambda x: f"<b>{x}</b>"), textposition='top center', textfont=dict(color='white', size=14)
+            ))
             
-            fig_ranking.update_layout(barmode='group', xaxis_title="Vendedor", yaxis=dict(title="Puntaje", range=[0, 110]), yaxis2=dict(title="Encuestas", overlaying='y', side='right', range=[0, df_resumen['Encuestas'].max() * 1.5], showgrid=False), template="plotly_white")
+            fig_ranking.update_layout(
+                barmode='group', xaxis_title="Vendedor", yaxis=dict(title="Puntaje", range=[0, 110]), 
+                yaxis2=dict(title="Encuestas", overlaying='y', side='right', range=[0, df_resumen['Encuestas'].max() * 1.5], showgrid=False), 
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)"
+            )
             st.plotly_chart(fig_ranking, use_container_width=True)
 
     # --- PESTAÑA 3: EVOLUCIÓN MENSUAL 0KM ---
@@ -191,33 +205,37 @@ if not df_ventas_raw.empty:
             # GRÁFICO DE DOBLE EJE (Barras + Líneas)
             fig_evolucion = go.Figure()
             
-            # 1. Barras de Cantidad de Encuestas (Al fondo, eje derecho)
+            # Barras (Eje Secundario) con etiqueta blanca y negrita
             fig_evolucion.add_trace(go.Bar(
                 x=df_tabla_mensual['Mes'], y=df_tabla_mensual['Q encuestas'], 
-                name='Cant. Encuestas', marker_color='rgba(169, 169, 169, 0.4)', # Gris sutil
-                yaxis='y2', text=df_tabla_mensual['Q encuestas'], textposition='auto'
+                name='Cant. Encuestas', marker_color='rgba(169, 169, 169, 0.3)', 
+                yaxis='y2', text=df_tabla_mensual['Q encuestas'].apply(lambda x: f"<b>{x}</b>"), textposition='auto',
+                textfont=dict(color='white', size=12)
             ))
             
-            # 2. Líneas de SSI y NPS (Al frente, eje izquierdo)
+            # Líneas SSI con etiqueta blanca y negrita
             fig_evolucion.add_trace(go.Scatter(
                 x=df_tabla_mensual['Mes'], y=df_tabla_mensual['SSI Puro'], 
-                mode='lines+markers+text', name='SSI Puro', line=dict(color='#1E3A8A', width=3), 
-                text=df_tabla_mensual['SSI Puro'].apply(lambda x: f"{x:.1f}"), textposition='top center'
+                mode='lines+markers+text', name='SSI Puro', line=dict(color='#3498db', width=3), 
+                text=df_tabla_mensual['SSI Puro'].apply(lambda x: f"<b>{x:.1f}</b>"), textposition='top center',
+                textfont=dict(color='white', size=12)
             ))
+            
+            # Líneas NPS con etiqueta blanca y negrita
             fig_evolucion.add_trace(go.Scatter(
                 x=df_tabla_mensual['Mes'], y=df_tabla_mensual['NPS dealer'], 
                 mode='lines+markers+text', name='NPS dealer', line=dict(color='#2ecc71', width=3), 
-                text=df_tabla_mensual['NPS dealer'].apply(lambda x: f"{x:.1f}%" if pd.notna(x) else ""), textposition='bottom center'
+                text=df_tabla_mensual['NPS dealer'].apply(lambda x: f"<b>{x:.1f}%</b>" if pd.notna(x) else ""), textposition='bottom center',
+                textfont=dict(color='white', size=12)
             ))
             
-            # Layout del doble eje
             max_encuestas = df_tabla_mensual['Q encuestas'].max()
             fig_evolucion.update_layout(
                 title="Evolución de SSI, NPS y Volumen de Encuestas",
                 yaxis=dict(title="Puntaje / Porcentaje", range=[0, 110]),
                 yaxis2=dict(title="Cantidad de Encuestas", overlaying='y', side='right', range=[0, max(10, max_encuestas * 1.5)], showgrid=False),
-                template="plotly_white",
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)"
             )
             st.plotly_chart(fig_evolucion, use_container_width=True)
 
@@ -228,10 +246,10 @@ if not df_ventas_raw.empty:
             formatos = {'Q encuestas': '{:.0f}', 'SSI Puro': '{:.1f}', 'NPS dealer': '{:.1f}%'}
             for c in cols_subindices: formatos[c] = '{:.1f}'
             
-            # Formato Condicional para Tabla 0km
+            # Formato de Fila Totales en la Tabla
             st.dataframe(
                 df_tabla_mensual.style.format(formatos, na_rep="-")
-                .apply(lambda x: ['font-weight: bold; background-color: #f0f2f6' if x['Mes'] == 'Total' else '' for i in x], axis=1)
+                .apply(lambda x: ['font-weight: bold; border-top: 1px solid gray;' if x['Mes'] == 'Total' else '' for i in x], axis=1)
                 .map(lambda val: 'color: #2ecc71; font-weight: bold;' if pd.notna(val) and val >= OBJETIVO_SSI else ('color: #e74c3c; font-weight: bold;' if pd.notna(val) else ''), subset=['SSI Puro'])
                 .map(lambda val: 'color: #2ecc71; font-weight: bold;' if pd.notna(val) and val >= OBJETIVO_NPS else ('color: #e74c3c; font-weight: bold;' if pd.notna(val) else ''), subset=['NPS dealer']),
                 use_container_width=True, hide_index=True
@@ -271,7 +289,6 @@ if not df_ventas_raw.empty:
         if not df_usados_raw.empty:
             columnas_u = df_usados_raw.columns.tolist()
             
-            # Coordenadas exactas indicadas para UCT
             col_nps_u = columnas_u[-1]
             col_ssi_u = next((c for c in columnas_u if 'ssi' in c.lower()), columnas_u[0])
             col_fecha_u = "Mes" if "Mes" in columnas_u else columnas_u[2]
@@ -280,20 +297,16 @@ if not df_ventas_raw.empty:
             df_u_proc = df_usados_raw.copy()
             df_u_proc['Mes_Filtro'] = df_u_proc[col_fecha_u].astype(str).str.strip().str.capitalize()
             
-            # Filtro por mes local exclusivo para esta pestaña
             st.write("#### 🔍 Filtro de Período (UCT)")
             meses_disp_u = [m for m in df_u_proc['Mes_Filtro'].unique() if m.lower() != 'nan']
             mes_sel_u = st.multiselect("Seleccionar Meses (USADO26):", meses_disp_u, default=meses_disp_u)
             
             df_u_filt = df_u_proc[df_u_proc['Mes_Filtro'].isin(mes_sel_u)] if mes_sel_u else df_u_proc.copy()
-            
-            # Limpieza Numérica
             df_u_filt['SSI_Num'] = pd.to_numeric(df_u_filt[col_ssi_u].astype(str).str.replace(',', '.').str.replace('%', ''), errors='coerce')
                 
             for c in top_5_cols:
                 df_u_filt[c] = pd.to_numeric(df_u_filt[c].astype(str).str.replace(',', '.').str.replace('%', ''), errors='coerce')
                 
-            # Relojes UCT
             OBJ_SSI_UCT = 94.5
             OBJ_NPS_UCT = 89.0
             
@@ -305,7 +318,6 @@ if not df_ventas_raw.empty:
             with cu1: st.plotly_chart(crear_reloj(ssi_uct_actual, "SSI UCT (Objetivo: 94.5)", OBJ_SSI_UCT, 100), use_container_width=True)
             with cu2: st.plotly_chart(crear_reloj(nps_uct_actual, "NPS UCT (Objetivo: 89%)", OBJ_NPS_UCT, 100), use_container_width=True)
             
-            # Evolución y Tabla (UCT)
             st.write("#### 📊 Evolución de los 5 Principales Indicadores")
             
             if top_5_cols:
@@ -324,26 +336,28 @@ if not df_ventas_raw.empty:
                 if res_u:
                     df_res_u = pd.DataFrame(res_u)
                     
-                    # Gráfico Combinado (Doble Eje) para Usados
                     fig_evo_u = go.Figure()
                     
-                    # Barras (Eje Secundario)
+                    # Barras de Encuestas UCT
                     fig_evo_u.add_trace(go.Bar(
                         x=df_res_u['Mes'], y=df_res_u['Q encuestas'], 
-                        name='Cant. Encuestas', marker_color='rgba(169, 169, 169, 0.4)', 
-                        yaxis='y2', text=df_res_u['Q encuestas'], textposition='auto'
+                        name='Cant. Encuestas', marker_color='rgba(169, 169, 169, 0.3)', 
+                        yaxis='y2', text=df_res_u['Q encuestas'].apply(lambda x: f"<b>{x}</b>"), textposition='auto',
+                        textfont=dict(color='white', size=12)
                     ))
                     
-                    # Líneas (Eje Principal)
+                    # Líneas SSI y NPS UCT
                     fig_evo_u.add_trace(go.Scatter(
                         x=df_res_u['Mes'], y=df_res_u['SSI UCT'], 
-                        mode='lines+markers+text', name='SSI UCT', line=dict(color='#1E3A8A', width=3), 
-                        text=df_res_u['SSI UCT'].apply(lambda x: f"{x:.1f}"), textposition='top center'
+                        mode='lines+markers+text', name='SSI UCT', line=dict(color='#3498db', width=3), 
+                        text=df_res_u['SSI UCT'].apply(lambda x: f"<b>{x:.1f}</b>"), textposition='top center',
+                        textfont=dict(color='white', size=12)
                     ))
                     fig_evo_u.add_trace(go.Scatter(
                         x=df_res_u['Mes'], y=df_res_u['NPS UCT'], 
                         mode='lines+markers+text', name='NPS UCT', line=dict(color='#2ecc71', width=3), 
-                        text=df_res_u['NPS UCT'].apply(lambda x: f"{x:.1f}%" if pd.notna(x) else ""), textposition='bottom center'
+                        text=df_res_u['NPS UCT'].apply(lambda x: f"<b>{x:.1f}%</b>" if pd.notna(x) else ""), textposition='bottom center',
+                        textfont=dict(color='white', size=12)
                     ))
                     
                     max_encuestas_u = df_res_u['Q encuestas'].max()
@@ -351,12 +365,11 @@ if not df_ventas_raw.empty:
                         title="Evolución de SSI, NPS y Volumen de Encuestas (UCT)",
                         yaxis=dict(title="Puntaje / Porcentaje", range=[0, 110]),
                         yaxis2=dict(title="Cantidad de Encuestas", overlaying='y', side='right', range=[0, max(10, max_encuestas_u * 1.5)], showgrid=False),
-                        template="plotly_white",
-                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)"
                     )
                     st.plotly_chart(fig_evo_u, use_container_width=True)
 
-                    # Fila de Totales
                     totales_u = {'Mes': 'Total', 'Q encuestas': df_res_u['Q encuestas'].sum(), 'SSI UCT': ssi_uct_actual, 'NPS UCT': nps_uct_actual}
                     for c in top_5_cols: totales_u[c] = df_u_filt[c].mean()
                     df_res_u.loc[len(df_res_u)] = totales_u
@@ -364,10 +377,10 @@ if not df_ventas_raw.empty:
                     formatos_u = {'Q encuestas': '{:.0f}', 'SSI UCT': '{:.1f}', 'NPS UCT': '{:.1f}%'}
                     for c in top_5_cols: formatos_u[c] = '{:.1f}'
                     
-                    # Formato Condicional para Tabla UCT
+                    # Formato Condicional y Total UCT
                     st.dataframe(
                         df_res_u.style.format(formatos_u, na_rep="-")
-                        .apply(lambda x: ['font-weight: bold; background-color: #f0f2f6' if x['Mes'] == 'Total' else '' for i in x], axis=1)
+                        .apply(lambda x: ['font-weight: bold; border-top: 1px solid gray;' if x['Mes'] == 'Total' else '' for i in x], axis=1)
                         .map(lambda val: 'color: #2ecc71; font-weight: bold;' if pd.notna(val) and val >= OBJ_SSI_UCT else ('color: #e74c3c; font-weight: bold;' if pd.notna(val) else ''), subset=['SSI UCT'])
                         .map(lambda val: 'color: #2ecc71; font-weight: bold;' if pd.notna(val) and val >= OBJ_NPS_UCT else ('color: #e74c3c; font-weight: bold;' if pd.notna(val) else ''), subset=['NPS UCT']),
                         use_container_width=True, hide_index=True
