@@ -95,10 +95,10 @@ if not df_raw.empty:
     for c in cols_subindices:
         df_procesado[c] = pd.to_numeric(df_procesado[c].astype(str).str.replace(',', '.').str.replace('%', ''), errors='coerce')
 
-    # Detectar dinámicamente la columna "Atencion Vendedor" para las comisiones
+    # Detectar dinámicamente la columna "Atencion Vendedor"
     col_atencion_vend = next((c for c in cols_subindices if 'atencion' in c.lower() and 'vendedor' in c.lower()), None)
     if not col_atencion_vend:
-        col_atencion_vend = next((c for c in cols_subindices if '02' in c), None) # Fallback al prefijo 02
+        col_atencion_vend = next((c for c in cols_subindices if '02' in c), None)
 
     # 4. Filtros Globales en Barra Lateral
     st.sidebar.header("🔍 Filtros de Visualización")
@@ -207,7 +207,7 @@ if not df_raw.empty:
             for c in cols_subindices: formatos[c] = '{:.1f}'
             st.dataframe(df_tabla_mensual.style.format(formatos, na_rep="-").apply(lambda x: ['font-weight: bold; background-color: #f0f2f6' if x['Mes'] == 'Total' else '' for i in x], axis=1), use_container_width=True, hide_index=True)
 
-    # --- PESTAÑA 4: COMISIONES Y LIQUIDACIÓN (NUEVA) ---
+    # --- PESTAÑA 4: COMISIONES Y LIQUIDACIÓN ---
     with tab_comisiones:
         st.write("### 💰 Tabla de Cálculo de Comisiones SSI")
         st.info("💡 Utiliza los filtros de Mes y Año de la barra lateral para liquidar las comisiones de un período específico.")
@@ -222,18 +222,21 @@ if not df_raw.empty:
                 ssi_promedio = grupo['SSI_Num'].mean()
                 atencion_promedio = grupo[col_atencion_vend].mean()
                 
-                # Lógica de cálculo de comisión estricta
-                if pd.isna(atencion_promedio):
+                # Regla de comisión basada en el valor real del indicador (Corte en 95.6)
+                if pd.isna(atencion_promedio) or cant_encuestas == 0:
                     comision = 0.00
                 elif atencion_promedio < 95.6:
                     comision = -0.05
                 else:
                     comision = 0.01
+                
+                # Se multiplica por 10 el indicador únicamente para la visualización en la tabla
+                atencion_multiplicada = atencion_promedio * 10 if pd.notna(atencion_promedio) else np.nan
                     
                 datos_comision.append({
                     'Vendedor': vend,
                     'Cantidad de Encuestas': cant_encuestas,
-                    'Atención del Vendedor': atencion_promedio,
+                    'Atención del Vendedor (x10)': atencion_multiplicada,
                     'SSI Promedio': ssi_promedio,
                     'Comisión SSI': comision
                 })
@@ -241,19 +244,19 @@ if not df_raw.empty:
             df_comisiones = pd.DataFrame(datos_comision)
             
             if not df_comisiones.empty:
-                # Ordenamos de mayor a menor por Atención del Vendedor
-                df_comisiones = df_comisiones.sort_values('Atención del Vendedor', ascending=False)
+                # Ordenamos de mayor a menor según el indicador de Atención del Vendedor
+                df_comisiones = df_comisiones.sort_values('Atención del Vendedor (x10)', ascending=False)
                 
-                # Formateo de la tabla (Colores dependiendo del resultado de la comisión)
+                # Formato condicional de la comisión (Rojo para penalización, Verde para bono)
                 def aplicar_colores_comision(val):
-                    if val == -0.05: return 'color: #e74c3c; font-weight: bold;'  # Rojo
-                    elif val == 0.01: return 'color: #2ecc71; font-weight: bold;' # Verde
-                    return 'color: #7f8c8d;' # Gris para 0
+                    if val == -0.05: return 'color: #e74c3c; font-weight: bold;'
+                    elif val == 0.01: return 'color: #2ecc71; font-weight: bold;'
+                    return 'color: #7f8c8d;'
                 
                 st.dataframe(
                     df_comisiones.style
                     .format({
-                        'Atención del Vendedor': '{:.1f}',
+                        'Atención del Vendedor (x10)': '{:.1f}',
                         'SSI Promedio': '{:.1f}',
                         'Comisión SSI': '{:.2f}'
                     })
