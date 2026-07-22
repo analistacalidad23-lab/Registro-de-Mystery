@@ -225,7 +225,7 @@ if not df_raw.empty:
                 # Regla de comisión basada en el valor real del indicador (Corte en 95.6)
                 if pd.isna(atencion_promedio) or cant_encuestas == 0:
                     comision = 0.00
-                elif atencion_promedio < 95.6:
+                elif atencion_promedio*10 < 95.6:
                     comision = -0.05
                 else:
                     comision = 0.01
