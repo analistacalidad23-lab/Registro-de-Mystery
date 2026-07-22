@@ -193,7 +193,15 @@ if not df_ventas_raw.empty:
 
             formatos = {'Q encuestas': '{:.0f}', 'SSI Puro': '{:.1f}', 'NPS dealer': '{:.1f}%'}
             for c in cols_subindices: formatos[c] = '{:.1f}'
-            st.dataframe(df_tabla_mensual.style.format(formatos, na_rep="-").apply(lambda x: ['font-weight: bold; background-color: #f0f2f6' if x['Mes'] == 'Total' else '' for i in x], axis=1), use_container_width=True, hide_index=True)
+            
+            # Formato Condicional para Tabla 0km
+            st.dataframe(
+                df_tabla_mensual.style.format(formatos, na_rep="-")
+                .apply(lambda x: ['font-weight: bold; background-color: #f0f2f6' if x['Mes'] == 'Total' else '' for i in x], axis=1)
+                .map(lambda val: 'color: #2ecc71; font-weight: bold;' if pd.notna(val) and val >= OBJETIVO_SSI else ('color: #e74c3c; font-weight: bold;' if pd.notna(val) else ''), subset=['SSI Puro'])
+                .map(lambda val: 'color: #2ecc71; font-weight: bold;' if pd.notna(val) and val >= OBJETIVO_NPS else ('color: #e74c3c; font-weight: bold;' if pd.notna(val) else ''), subset=['NPS dealer']),
+                use_container_width=True, hide_index=True
+            )
 
     # --- PESTAÑA 4: COMISIONES 0KM ---
     with tab_comisiones:
@@ -232,11 +240,7 @@ if not df_ventas_raw.empty:
             # Coordenadas exactas indicadas para UCT
             col_nps_u = columnas_u[-1]
             col_ssi_u = next((c for c in columnas_u if 'ssi' in c.lower()), columnas_u[0])
-            
-            # 1. Columna C (índice 2) obligatoria como Mes si no se llama exactamente "Mes"
             col_fecha_u = "Mes" if "Mes" in columnas_u else columnas_u[2]
-            
-            # 2. Columnas F a J (índices 5 al 9) obligatorias como los 5 indicadores
             top_5_cols = columnas_u[5:10] if len(columnas_u) >= 10 else []
             
             df_u_proc = df_usados_raw.copy()
@@ -293,11 +297,13 @@ if not df_ventas_raw.empty:
                     
                     formatos_u = {'Q encuestas': '{:.0f}', 'SSI UCT': '{:.1f}', 'NPS UCT': '{:.1f}%'}
                     for c in top_5_cols: formatos_u[c] = '{:.1f}'
-                        
+                    
+                    # Formato Condicional para Tabla UCT
                     st.dataframe(
-                        df_res_u.style.format(formatos_u, na_rep="-").apply(
-                            lambda x: ['font-weight: bold; background-color: #f0f2f6' if x['Mes'] == 'Total' else '' for i in x], axis=1
-                        ),
+                        df_res_u.style.format(formatos_u, na_rep="-")
+                        .apply(lambda x: ['font-weight: bold; background-color: #f0f2f6' if x['Mes'] == 'Total' else '' for i in x], axis=1)
+                        .map(lambda val: 'color: #2ecc71; font-weight: bold;' if pd.notna(val) and val >= OBJ_SSI_UCT else ('color: #e74c3c; font-weight: bold;' if pd.notna(val) else ''), subset=['SSI UCT'])
+                        .map(lambda val: 'color: #2ecc71; font-weight: bold;' if pd.notna(val) and val >= OBJ_NPS_UCT else ('color: #e74c3c; font-weight: bold;' if pd.notna(val) else ''), subset=['NPS UCT']),
                         use_container_width=True, hide_index=True
                     )
                 else:
