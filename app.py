@@ -93,7 +93,7 @@ if not df_ventas_raw.empty:
 
     df_procesado = df_ventas_raw.copy()
     
-    # Preparar Fechas
+    # Preparar Fechas 0km
     try:
         df_procesado['Fecha_DT'] = pd.to_datetime(df_procesado[col_fecha], errors='coerce')
         df_procesado['Mes_Nombre'] = df_procesado['Fecha_DT'].dt.strftime('%B').str.lower()
@@ -106,7 +106,7 @@ if not df_ventas_raw.empty:
         df_procesado['Año'] = "N/D"
         df_procesado['Mes_Período'] = df_procesado[col_fecha].astype(str)
 
-    # Limpieza de SSI y Subíndices
+    # Limpieza de SSI y Subíndices 0km
     df_procesado['SSI_Num'] = pd.to_numeric(df_procesado[col_ssi].astype(str).str.replace(',', '.').str.replace('%', ''), errors='coerce')
     cols_subindices = [c for c in columnas_disponibles if any(x in c for x in ['01', '02', '03', '04', '05', '08', '09', '11'])]
     for c in cols_subindices:
@@ -115,7 +115,7 @@ if not df_ventas_raw.empty:
     col_atencion_vend = next((c for c in cols_subindices if 'atencion' in c.lower() and 'vendedor' in c.lower()), None)
     if not col_atencion_vend: col_atencion_vend = next((c for c in cols_subindices if '02' in c), None)
 
-    # 4. Filtros Globales en Barra Lateral (Solo aplican a las pestañas de 0km)
+    # 4. Filtros Globales en Barra Lateral (0km)
     st.sidebar.header("🔍 Filtros Generales 0km")
     años_disp = sorted([a for a in df_procesado['Año'].unique() if a != "0"], reverse=True)
     año_sel = st.sidebar.selectbox("Año:", ["Todos"] + años_disp)
@@ -229,42 +229,33 @@ if not df_ventas_raw.empty:
         if not df_usados_raw.empty:
             columnas_u = df_usados_raw.columns.tolist()
             
-            # Autodetección rápida para la hoja de usados
+            # Coordenadas exactas indicadas para UCT
             col_nps_u = columnas_u[-1]
             col_ssi_u = next((c for c in columnas_u if 'ssi' in c.lower()), columnas_u[0])
-            col_fecha_u = next((c for c in columnas_u if 'fecha' in c.lower() or 'mes' in c.lower() or 'periodo' in c.lower()), columnas_u[0])
+            
+            # 1. Columna C (índice 2) obligatoria como Mes si no se llama exactamente "Mes"
+            col_fecha_u = "Mes" if "Mes" in columnas_u else columnas_u[2]
+            
+            # 2. Columnas F a J (índices 5 al 9) obligatorias como los 5 indicadores
+            top_5_cols = columnas_u[5:10] if len(columnas_u) >= 10 else []
             
             df_u_proc = df_usados_raw.copy()
+            df_u_proc['Mes_Filtro'] = df_u_proc[col_fecha_u].astype(str).str.strip().str.capitalize()
             
-            try:
-                df_u_proc['Fecha_DT'] = pd.to_datetime(df_u_proc[col_fecha_u], errors='coerce')
-                df_u_proc['Mes_Nombre'] = df_u_proc['Fecha_DT'].dt.strftime('%B').str.lower()
-                df_u_proc['Mes_Período'] = df_u_proc['Fecha_DT'].dt.strftime('%Y-%m')
-            except:
-                df_u_proc['Mes_Nombre'] = df_u_proc[col_fecha_u].astype(str)
-                df_u_proc['Mes_Período'] = df_u_proc[col_fecha_u].astype(str)
-                
             # Filtro por mes local exclusivo para esta pestaña
             st.write("#### 🔍 Filtro de Período (UCT)")
-            meses_disp_u = sorted(df_u_proc['Mes_Período'].dropna().unique().tolist())
+            meses_disp_u = [m for m in df_u_proc['Mes_Filtro'].unique() if m.lower() != 'nan']
             mes_sel_u = st.multiselect("Seleccionar Meses (USADO26):", meses_disp_u, default=meses_disp_u)
             
-            df_u_filt = df_u_proc[df_u_proc['Mes_Período'].isin(mes_sel_u)] if mes_sel_u else df_u_proc.copy()
+            df_u_filt = df_u_proc[df_u_proc['Mes_Filtro'].isin(mes_sel_u)] if mes_sel_u else df_u_proc.copy()
             
             # Limpieza Numérica
             df_u_filt['SSI_Num'] = pd.to_numeric(df_u_filt[col_ssi_u].astype(str).str.replace(',', '.').str.replace('%', ''), errors='coerce')
-            
-            # Identificamos los subíndices de la hoja de usados
-            cols_sub_u = [c for c in columnas_u if any(x in c for x in ['01', '02', '03', '04', '05', '06', '07', '08', '09', '11'])]
-            if not cols_sub_u:
-                cols_sub_u = [c for c in columnas_u if c not in [col_nps_u, col_ssi_u, col_fecha_u, 'Mes_Nombre', 'Mes_Período', 'Fecha_DT']]
                 
-            for c in cols_sub_u:
+            for c in top_5_cols:
                 df_u_filt[c] = pd.to_numeric(df_u_filt[c].astype(str).str.replace(',', '.').str.replace('%', ''), errors='coerce')
                 
-            top_5_cols = cols_sub_u[:5] # Extraemos los 5 principales indicadores
-            
-            # 1. Relojes UCT
+            # Relojes UCT
             OBJ_SSI_UCT = 94.5
             OBJ_NPS_UCT = 89.0
             
@@ -276,40 +267,43 @@ if not df_ventas_raw.empty:
             with cu1: st.plotly_chart(crear_reloj(ssi_uct_actual, "SSI UCT (Objetivo: 94.5)", OBJ_SSI_UCT, 100), use_container_width=True)
             with cu2: st.plotly_chart(crear_reloj(nps_uct_actual, "NPS UCT (Objetivo: 89%)", OBJ_NPS_UCT, 100), use_container_width=True)
             
-            # 2. Tabla 5 principales indicadores por mes
+            # Tabla 5 principales indicadores por mes (Cols F a J)
             st.write("#### 📊 Evolución de los 5 Principales Indicadores")
             
-            df_u_mensual = df_u_filt.groupby('Mes_Nombre', sort=False)
-            res_u = []
-            for mes, grupo in df_u_mensual:
-                fila = {
-                    'Mes': mes.capitalize(),
-                    'Q encuestas': len(grupo),
-                    'SSI UCT': grupo['SSI_Num'].mean(),
-                    'NPS UCT': calcular_nps(grupo[col_nps_u])
-                }
-                for c in top_5_cols: fila[c] = grupo[c].mean()
-                res_u.append(fila)
-                
-            if res_u:
-                df_res_u = pd.DataFrame(res_u)
-                
-                # Fila de Totales
-                totales_u = {'Mes': 'Total', 'Q encuestas': df_res_u['Q encuestas'].sum(), 'SSI UCT': ssi_uct_actual, 'NPS UCT': nps_uct_actual}
-                for c in top_5_cols: totales_u[c] = df_u_filt[c].mean()
-                df_res_u.loc[len(df_res_u)] = totales_u
-                
-                formatos_u = {'Q encuestas': '{:.0f}', 'SSI UCT': '{:.1f}', 'NPS UCT': '{:.1f}%'}
-                for c in top_5_cols: formatos_u[c] = '{:.1f}'
+            if top_5_cols:
+                df_u_mensual = df_u_filt.groupby('Mes_Filtro', sort=False)
+                res_u = []
+                for mes, grupo in df_u_mensual:
+                    fila = {
+                        'Mes': mes,
+                        'Q encuestas': len(grupo),
+                        'SSI UCT': grupo['SSI_Num'].mean(),
+                        'NPS UCT': calcular_nps(grupo[col_nps_u])
+                    }
+                    for c in top_5_cols: fila[c] = grupo[c].mean()
+                    res_u.append(fila)
                     
-                st.dataframe(
-                    df_res_u.style.format(formatos_u, na_rep="-").apply(
-                        lambda x: ['font-weight: bold; background-color: #f0f2f6' if x['Mes'] == 'Total' else '' for i in x], axis=1
-                    ),
-                    use_container_width=True, hide_index=True
-                )
+                if res_u:
+                    df_res_u = pd.DataFrame(res_u)
+                    
+                    # Fila de Totales
+                    totales_u = {'Mes': 'Total', 'Q encuestas': df_res_u['Q encuestas'].sum(), 'SSI UCT': ssi_uct_actual, 'NPS UCT': nps_uct_actual}
+                    for c in top_5_cols: totales_u[c] = df_u_filt[c].mean()
+                    df_res_u.loc[len(df_res_u)] = totales_u
+                    
+                    formatos_u = {'Q encuestas': '{:.0f}', 'SSI UCT': '{:.1f}', 'NPS UCT': '{:.1f}%'}
+                    for c in top_5_cols: formatos_u[c] = '{:.1f}'
+                        
+                    st.dataframe(
+                        df_res_u.style.format(formatos_u, na_rep="-").apply(
+                            lambda x: ['font-weight: bold; background-color: #f0f2f6' if x['Mes'] == 'Total' else '' for i in x], axis=1
+                        ),
+                        use_container_width=True, hide_index=True
+                    )
+                else:
+                    st.warning("No hay datos para el período seleccionado.")
             else:
-                st.warning("No hay datos para el período seleccionado.")
+                st.error("No se encontraron las columnas F a J (índices 5 al 9) en la hoja de Usados.")
         else:
             st.warning("No se pudo cargar la hoja USADO26. Verifica que la URL o el nombre de la hoja sean correctos.")
 
