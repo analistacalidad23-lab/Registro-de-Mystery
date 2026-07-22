@@ -22,12 +22,20 @@ st.markdown("""
 st.markdown('<div class="main-title">🎯 Tablero de Gestión: Calidad, NPS y Comisiones</div>', unsafe_allow_html=True)
 st.markdown('<div class="subtitle">Seguimiento de Satisfacción y Lealtad del Cliente - 0km y Usados Certificados</div>', unsafe_allow_html=True)
 
+# --- BOTÓN DE ACTUALIZACIÓN MANUAL EN BARRA LATERAL ---
+st.sidebar.header("🔄 Sincronización")
+if st.sidebar.button("Actualizar Datos Ahora"):
+    st.cache_data.clear() # Limpia la memoria caché al instante
+    st.rerun() # Reinicia la app para forzar la descarga de los datos nuevos
+st.sidebar.markdown("---")
+
 # 2. Conexión de Datos (Ambas Hojas)
 SHEET_ID = "1PGoOlFTN2WuuiEqRk0KPrcLZL6pEcFVeNWo35shsUSA"
 URL_VENTAS = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=VENTAS26"
 URL_USADOS = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=USADO26"
 
-@st.cache_data(ttl=600)
+# Ajustamos la caché para que se actualice sola cada 60 segundos (1 minuto)
+@st.cache_data(ttl=60)
 def cargar_datos(url):
     try:
         df = pd.read_csv(url)
