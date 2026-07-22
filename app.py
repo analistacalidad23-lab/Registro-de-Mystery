@@ -25,8 +25,8 @@ st.markdown('<div class="subtitle">Seguimiento de Satisfacción y Lealtad del Cl
 # --- BOTÓN DE ACTUALIZACIÓN MANUAL EN BARRA LATERAL ---
 st.sidebar.header("🔄 Sincronización")
 if st.sidebar.button("Actualizar Datos Ahora"):
-    st.cache_data.clear() # Limpia la memoria caché al instante
-    st.rerun() # Reinicia la app para forzar la descarga de los datos nuevos
+    st.cache_data.clear()
+    st.rerun()
 st.sidebar.markdown("---")
 
 # 2. Conexión de Datos (Ambas Hojas)
@@ -34,7 +34,6 @@ SHEET_ID = "1PGoOlFTN2WuuiEqRk0KPrcLZL6pEcFVeNWo35shsUSA"
 URL_VENTAS = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=VENTAS26"
 URL_USADOS = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=USADO26"
 
-# Ajustamos la caché para que se actualice sola cada 60 segundos (1 minuto)
 @st.cache_data(ttl=60)
 def cargar_datos(url):
     try:
@@ -174,7 +173,7 @@ if not df_ventas_raw.empty:
             fig_ranking.add_trace(go.Bar(x=df_resumen['Vendedor'], y=df_resumen['NPS'], name='NPS (%)', marker_color='#9b59b6', text=df_resumen['NPS'].apply(lambda x: f"{x:.1f}%" if pd.notna(x) else "N/D"), textposition='auto'))
             fig_ranking.add_trace(go.Scatter(x=df_resumen['Vendedor'], y=df_resumen['Encuestas'], name='Cant. Encuestas', mode='lines+markers+text', yaxis='y2', marker=dict(color='#e67e22', size=12), line=dict(color='#e67e22', dash='dot'), text=df_resumen['Encuestas'], textposition='top center'))
             
-            fig_ranking.update_layout(barmode='group', xaxis_title="Vendedor", yaxis=dict(title="Puntaje", range=[0, 110]), yaxis2=dict(title="Encuestas", overlaying='y', side='right', range=[0, df_resumen['Encuestas'].max() * 1.5]), template="plotly_white")
+            fig_ranking.update_layout(barmode='group', xaxis_title="Vendedor", yaxis=dict(title="Puntaje", range=[0, 110]), yaxis2=dict(title="Encuestas", overlaying='y', side='right', range=[0, df_resumen['Encuestas'].max() * 1.5], showgrid=False), template="plotly_white")
             st.plotly_chart(fig_ranking, use_container_width=True)
 
     # --- PESTAÑA 3: EVOLUCIÓN MENSUAL 0KM ---
@@ -189,10 +188,37 @@ if not df_ventas_raw.empty:
 
         df_tabla_mensual = pd.DataFrame(resumen_mensual)
         if not df_tabla_mensual.empty:
+            # GRÁFICO DE DOBLE EJE (Barras + Líneas)
             fig_evolucion = go.Figure()
-            fig_evolucion.add_trace(go.Scatter(x=df_tabla_mensual['Mes'], y=df_tabla_mensual['SSI Puro'], mode='lines+markers+text', name='SSI Puro', line=dict(color='#1E3A8A', width=3), text=df_tabla_mensual['SSI Puro'].apply(lambda x: f"{x:.1f}"), textposition='top center'))
-            fig_evolucion.add_trace(go.Scatter(x=df_tabla_mensual['Mes'], y=df_tabla_mensual['NPS dealer'], mode='lines+markers+text', name='NPS dealer', line=dict(color='#2ecc71', width=3), text=df_tabla_mensual['NPS dealer'].apply(lambda x: f"{x:.1f}%" if pd.notna(x) else ""), textposition='bottom center'))
-            fig_evolucion.update_layout(title="Evolución de SSI y NPS", yaxis_range=[0, 110], template="plotly_white")
+            
+            # 1. Barras de Cantidad de Encuestas (Al fondo, eje derecho)
+            fig_evolucion.add_trace(go.Bar(
+                x=df_tabla_mensual['Mes'], y=df_tabla_mensual['Q encuestas'], 
+                name='Cant. Encuestas', marker_color='rgba(169, 169, 169, 0.4)', # Gris sutil
+                yaxis='y2', text=df_tabla_mensual['Q encuestas'], textposition='auto'
+            ))
+            
+            # 2. Líneas de SSI y NPS (Al frente, eje izquierdo)
+            fig_evolucion.add_trace(go.Scatter(
+                x=df_tabla_mensual['Mes'], y=df_tabla_mensual['SSI Puro'], 
+                mode='lines+markers+text', name='SSI Puro', line=dict(color='#1E3A8A', width=3), 
+                text=df_tabla_mensual['SSI Puro'].apply(lambda x: f"{x:.1f}"), textposition='top center'
+            ))
+            fig_evolucion.add_trace(go.Scatter(
+                x=df_tabla_mensual['Mes'], y=df_tabla_mensual['NPS dealer'], 
+                mode='lines+markers+text', name='NPS dealer', line=dict(color='#2ecc71', width=3), 
+                text=df_tabla_mensual['NPS dealer'].apply(lambda x: f"{x:.1f}%" if pd.notna(x) else ""), textposition='bottom center'
+            ))
+            
+            # Layout del doble eje
+            max_encuestas = df_tabla_mensual['Q encuestas'].max()
+            fig_evolucion.update_layout(
+                title="Evolución de SSI, NPS y Volumen de Encuestas",
+                yaxis=dict(title="Puntaje / Porcentaje", range=[0, 110]),
+                yaxis2=dict(title="Cantidad de Encuestas", overlaying='y', side='right', range=[0, max(10, max_encuestas * 1.5)], showgrid=False),
+                template="plotly_white",
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+            )
             st.plotly_chart(fig_evolucion, use_container_width=True)
 
             totales = {'Mes': 'Total', 'Q encuestas': df_tabla_mensual['Q encuestas'].sum(), 'SSI Puro': df_filtrado['SSI_Num'].mean(), 'NPS dealer': calcular_nps(df_filtrado[col_nps])}
@@ -279,7 +305,7 @@ if not df_ventas_raw.empty:
             with cu1: st.plotly_chart(crear_reloj(ssi_uct_actual, "SSI UCT (Objetivo: 94.5)", OBJ_SSI_UCT, 100), use_container_width=True)
             with cu2: st.plotly_chart(crear_reloj(nps_uct_actual, "NPS UCT (Objetivo: 89%)", OBJ_NPS_UCT, 100), use_container_width=True)
             
-            # Tabla 5 principales indicadores por mes (Cols F a J)
+            # Evolución y Tabla (UCT)
             st.write("#### 📊 Evolución de los 5 Principales Indicadores")
             
             if top_5_cols:
@@ -298,6 +324,38 @@ if not df_ventas_raw.empty:
                 if res_u:
                     df_res_u = pd.DataFrame(res_u)
                     
+                    # Gráfico Combinado (Doble Eje) para Usados
+                    fig_evo_u = go.Figure()
+                    
+                    # Barras (Eje Secundario)
+                    fig_evo_u.add_trace(go.Bar(
+                        x=df_res_u['Mes'], y=df_res_u['Q encuestas'], 
+                        name='Cant. Encuestas', marker_color='rgba(169, 169, 169, 0.4)', 
+                        yaxis='y2', text=df_res_u['Q encuestas'], textposition='auto'
+                    ))
+                    
+                    # Líneas (Eje Principal)
+                    fig_evo_u.add_trace(go.Scatter(
+                        x=df_res_u['Mes'], y=df_res_u['SSI UCT'], 
+                        mode='lines+markers+text', name='SSI UCT', line=dict(color='#1E3A8A', width=3), 
+                        text=df_res_u['SSI UCT'].apply(lambda x: f"{x:.1f}"), textposition='top center'
+                    ))
+                    fig_evo_u.add_trace(go.Scatter(
+                        x=df_res_u['Mes'], y=df_res_u['NPS UCT'], 
+                        mode='lines+markers+text', name='NPS UCT', line=dict(color='#2ecc71', width=3), 
+                        text=df_res_u['NPS UCT'].apply(lambda x: f"{x:.1f}%" if pd.notna(x) else ""), textposition='bottom center'
+                    ))
+                    
+                    max_encuestas_u = df_res_u['Q encuestas'].max()
+                    fig_evo_u.update_layout(
+                        title="Evolución de SSI, NPS y Volumen de Encuestas (UCT)",
+                        yaxis=dict(title="Puntaje / Porcentaje", range=[0, 110]),
+                        yaxis2=dict(title="Cantidad de Encuestas", overlaying='y', side='right', range=[0, max(10, max_encuestas_u * 1.5)], showgrid=False),
+                        template="plotly_white",
+                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                    )
+                    st.plotly_chart(fig_evo_u, use_container_width=True)
+
                     # Fila de Totales
                     totales_u = {'Mes': 'Total', 'Q encuestas': df_res_u['Q encuestas'].sum(), 'SSI UCT': ssi_uct_actual, 'NPS UCT': nps_uct_actual}
                     for c in top_5_cols: totales_u[c] = df_u_filt[c].mean()
