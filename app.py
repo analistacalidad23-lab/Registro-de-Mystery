@@ -60,6 +60,19 @@ def calcular_nps(serie):
         if total == 0: return np.nan
         return (promotores - detractores) / total * 100.0
 
+def obtener_estado_nps(val):
+    if pd.isna(val) or val == "": return 'Sin Dato'
+    try:
+        v = float(val)
+        if v >= 9: return 'Promotor'
+        elif v >= 7: return 'Neutro'
+        else: return 'Detractor'
+    except:
+        s = str(val).lower()
+        if 'promotor' in s: return 'Promotor'
+        elif 'detractor' in s: return 'Detractor'
+        else: return 'Neutro'
+
 def crear_reloj(valor, titulo, objetivo, max_val, color_ok="#2ecc71", color_bad="#e74c3c"):
     valor = 0 if pd.isna(valor) else valor
     color_actual = color_ok if valor >= objetivo else color_bad
@@ -97,6 +110,10 @@ if not df_ventas_raw.empty:
 
     col_sucursal_detectada = next((c for c in columnas_disponibles if 'boca' in c.lower() or 'sucursal' in c.lower() or 'concesionario' in c.lower()), columnas_disponibles[0])
     col_sucursal = st.sidebar.selectbox("Columna Boca de Venta:", columnas_disponibles, index=columnas_disponibles.index(col_sucursal_detectada))
+
+    # Detectar Cliente y Comentario 0km (Columna AE = Índice 30)
+    col_cliente = next((c for c in columnas_disponibles if 'cliente' in c.lower() or 'nombre' in c.lower() or 'razon' in c.lower()), columnas_disponibles[0])
+    col_comentario_0km = columnas_disponibles[30] if len(columnas_disponibles) > 30 else columnas_disponibles[-1]
 
     df_procesado = df_ventas_raw.copy()
     
@@ -138,7 +155,11 @@ if not df_ventas_raw.empty:
     if boca_sel != "Todas": df_filtrado = df_filtrado[df_filtrado[col_sucursal].astype(str) == boca_sel]
     if meses_sel: df_filtrado = df_filtrado[df_filtrado['Mes_Período'].isin(meses_sel)]
 
-    # 5. Creación de Pestañas (Se unifican Relojes y Evolución en "Venta Convencional 0km")
+    # Clasificar el NPS y limpiar los comentarios para la burbuja
+    df_filtrado['Estado_NPS'] = df_filtrado[col_nps].apply(obtener_estado_nps)
+    df_filtrado['Comentario_Cliente'] = df_filtrado[col_comentario_0km].fillna("Sin comentarios")
+
+    # 5. Creación de Pestañas
     tab_convencional, tab_ranking, tab_comisiones, tab_usados = st.tabs([
         "📊 Venta Convencional 0km", 
         "🏆 Ranking Vendedores", 
@@ -146,7 +167,7 @@ if not df_ventas_raw.empty:
         "🚗 Usados Certificados"
     ])
 
-    # --- PESTAÑA 1: VENTA CONVENCIONAL 0KM (RELOJES + EVOLUCIÓN MENSUAL) ---
+    # --- PESTAÑA 1: VENTA CONVENCIONAL 0KM ---
     with tab_convencional:
         st.write("### Estado Actual vs Objetivos (0km)")
         OBJETIVO_SSI = 95.6
@@ -154,15 +175,13 @@ if not df_ventas_raw.empty:
         ssi_actual = df_filtrado['SSI_Num'].mean()
         nps_actual = calcular_nps(df_filtrado[col_nps])
 
-        # Render de los relojes generales
         col1, col2 = st.columns(2)
         with col1: st.plotly_chart(crear_reloj(ssi_actual, "Indicador SSI (Objetivo: 95.6)", OBJETIVO_SSI, 100), use_container_width=True)
         with col2: st.plotly_chart(crear_reloj(nps_actual, "Indicador NPS (Objetivo: 87%)", OBJETIVO_NPS, 100), use_container_width=True)
 
-        st.markdown("---") # Línea divisoria sutil
+        st.markdown("---")
         st.write(f"### Desempeño Mensual - Boca de Venta: {boca_sel} | Año: {año_sel}")
         
-        # Procesamiento para la evolución mensual
         df_mensual = df_filtrado.sort_values('Mes_Num').groupby('Mes_Nombre', sort=False) if 'Mes_Num' in df_filtrado.columns else df_filtrado.groupby('Mes_Nombre', sort=False)
         resumen_mensual = []
         for mes, grupo in df_mensual:
@@ -172,7 +191,6 @@ if not df_ventas_raw.empty:
 
         df_tabla_mensual = pd.DataFrame(resumen_mensual)
         if not df_tabla_mensual.empty:
-            # Gráfico de doble eje (Barras + Líneas)
             fig_evolucion = go.Figure()
             
             fig_evolucion.add_trace(go.Bar(
@@ -181,14 +199,12 @@ if not df_ventas_raw.empty:
                 yaxis='y2', text=df_tabla_mensual['Q encuestas'].apply(lambda x: f"<b>{x}</b>"), textposition='auto',
                 textfont=dict(color='white', size=12)
             ))
-            
             fig_evolucion.add_trace(go.Scatter(
                 x=df_tabla_mensual['Mes'], y=df_tabla_mensual['SSI Puro'], 
                 mode='lines+markers+text', name='SSI Puro', line=dict(color='#3498db', width=3), 
                 text=df_tabla_mensual['SSI Puro'].apply(lambda x: f"<b>{x:.1f}</b>"), textposition='top center',
                 textfont=dict(color='white', size=12)
             ))
-            
             fig_evolucion.add_trace(go.Scatter(
                 x=df_tabla_mensual['Mes'], y=df_tabla_mensual['NPS dealer'], 
                 mode='lines+markers+text', name='NPS dealer', line=dict(color='#2ecc71', width=3), 
@@ -206,7 +222,6 @@ if not df_ventas_raw.empty:
             )
             st.plotly_chart(fig_evolucion, use_container_width=True)
 
-            # Tabla resumen de la evolución mensual
             totales = {'Mes': 'Total', 'Q encuestas': df_tabla_mensual['Q encuestas'].sum(), 'SSI Puro': df_filtrado['SSI_Num'].mean(), 'NPS dealer': calcular_nps(df_filtrado[col_nps])}
             for c in cols_subindices: totales[c] = df_filtrado[c].mean()
             df_tabla_mensual.loc[len(df_tabla_mensual)] = totales
@@ -221,6 +236,35 @@ if not df_ventas_raw.empty:
                 .map(lambda val: 'color: #2ecc71; font-weight: bold;' if pd.notna(val) and val >= OBJETIVO_NPS else ('color: #e74c3c; font-weight: bold;' if pd.notna(val) else ''), subset=['NPS dealer']),
                 use_container_width=True, hide_index=True
             )
+            
+            # NUEVO GRÁFICO: Detalle de NPS (Burbujas)
+            st.write("#### 💬 Detalle de Encuestas NPS (0km)")
+            st.info("💡 Pasa el mouse sobre los puntos o haz clic en ellos para leer el comentario completo, el nombre del cliente y su clasificación.")
+            
+            fig_burbujas_0km = px.strip(
+                df_filtrado,
+                x=col_vendedor,
+                y=col_nps,
+                color='Estado_NPS',
+                color_discrete_map={'Promotor': '#2ecc71', 'Neutro': '#f1c40f', 'Detractor': '#e74c3c'},
+                hover_name=col_cliente,
+                hover_data={
+                    col_vendedor: False,
+                    col_nps: True,
+                    'Estado_NPS': True,
+                    'Comentario_Cliente': True
+                },
+                stripmode='overlay'
+            )
+            
+            fig_burbujas_0km.update_traces(marker=dict(size=14, opacity=0.8, line=dict(width=1, color='white')))
+            fig_burbujas_0km.update_layout(
+                yaxis_title="Nota NPS",
+                xaxis_title="Vendedor",
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                legend_title_text="Clasificación"
+            )
+            st.plotly_chart(fig_burbujas_0km, use_container_width=True)
 
     # --- PESTAÑA 2: RANKING 0KM ---
     with tab_ranking:
@@ -287,10 +331,15 @@ if not df_ventas_raw.empty:
         if not df_usados_raw.empty:
             columnas_u = df_usados_raw.columns.tolist()
             
+            # Coordenadas exactas indicadas para UCT
             col_nps_u = columnas_u[-1]
             col_ssi_u = next((c for c in columnas_u if 'ssi' in c.lower()), columnas_u[0])
             col_fecha_u = "Mes" if "Mes" in columnas_u else columnas_u[2]
             top_5_cols = columnas_u[5:10] if len(columnas_u) >= 10 else []
+            
+            # Detección de Cliente y Comentario UCT (Columna P = Índice 15)
+            col_cliente_u = next((c for c in columnas_u if 'cliente' in c.lower() or 'nombre' in c.lower() or 'razon' in c.lower()), columnas_u[0])
+            col_comentario_uct = columnas_u[15] if len(columnas_u) > 15 else columnas_u[-1]
             
             df_u_proc = df_usados_raw.copy()
             df_u_proc['Mes_Filtro'] = df_u_proc[col_fecha_u].astype(str).str.strip().str.capitalize()
@@ -304,6 +353,10 @@ if not df_ventas_raw.empty:
                 
             for c in top_5_cols:
                 df_u_filt[c] = pd.to_numeric(df_u_filt[c].astype(str).str.replace(',', '.').str.replace('%', ''), errors='coerce')
+                
+            # Clasificación y limpieza para la burbuja UCT
+            df_u_filt['Estado_NPS'] = df_u_filt[col_nps_u].apply(obtener_estado_nps)
+            df_u_filt['Comentario_Cliente'] = df_u_filt[col_comentario_uct].fillna("Sin comentarios")
                 
             OBJ_SSI_UCT = 94.5
             OBJ_NPS_UCT = 89.0
@@ -380,6 +433,36 @@ if not df_ventas_raw.empty:
                         .map(lambda val: 'color: #2ecc71; font-weight: bold;' if pd.notna(val) and val >= OBJ_NPS_UCT else ('color: #e74c3c; font-weight: bold;' if pd.notna(val) else ''), subset=['NPS UCT']),
                         use_container_width=True, hide_index=True
                     )
+                    
+                    # NUEVO GRÁFICO: Detalle de NPS (Burbujas)
+                    st.write("#### 💬 Detalle de Encuestas NPS (UCT)")
+                    st.info("💡 Pasa el mouse sobre los puntos o haz clic en ellos para leer el comentario completo, el nombre del cliente y su clasificación.")
+                    
+                    fig_burbujas_uct = px.strip(
+                        df_u_filt,
+                        x='Mes_Filtro',
+                        y=col_nps_u,
+                        color='Estado_NPS',
+                        color_discrete_map={'Promotor': '#2ecc71', 'Neutro': '#f1c40f', 'Detractor': '#e74c3c'},
+                        hover_name=col_cliente_u,
+                        hover_data={
+                            'Mes_Filtro': False,
+                            col_nps_u: True,
+                            'Estado_NPS': True,
+                            'Comentario_Cliente': True
+                        },
+                        stripmode='overlay'
+                    )
+                    
+                    fig_burbujas_uct.update_traces(marker=dict(size=14, opacity=0.8, line=dict(width=1, color='white')))
+                    fig_burbujas_uct.update_layout(
+                        yaxis_title="Nota NPS",
+                        xaxis_title="Mes de Encuesta",
+                        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                        legend_title_text="Clasificación"
+                    )
+                    st.plotly_chart(fig_burbujas_uct, use_container_width=True)
+
                 else:
                     st.warning("No hay datos para el período seleccionado.")
             else:
