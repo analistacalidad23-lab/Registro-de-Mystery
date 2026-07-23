@@ -138,26 +138,89 @@ if not df_ventas_raw.empty:
     if boca_sel != "Todas": df_filtrado = df_filtrado[df_filtrado[col_sucursal].astype(str) == boca_sel]
     if meses_sel: df_filtrado = df_filtrado[df_filtrado['Mes_Período'].isin(meses_sel)]
 
-    # 5. Creación de Pestañas
-    tab_resumen, tab_ranking, tab_evolucion, tab_comisiones, tab_usados = st.tabs([
-        "⏱️ Relojes (0km)", 
+    # 5. Creación de Pestañas (Se unifican Relojes y Evolución en "Venta Convencional 0km")
+    tab_convencional, tab_ranking, tab_comisiones, tab_usados = st.tabs([
+        "📊 Venta Convencional 0km", 
         "🏆 Ranking Vendedores", 
-        "📅 Evolución Mensual",
         "💰 Comisiones SSI",
         "🚗 Usados Certificados"
     ])
 
-    # --- PESTAÑA 1: RELOJES 0KM ---
-    with tab_resumen:
+    # --- PESTAÑA 1: VENTA CONVENCIONAL 0KM (RELOJES + EVOLUCIÓN MENSUAL) ---
+    with tab_convencional:
         st.write("### Estado Actual vs Objetivos (0km)")
         OBJETIVO_SSI = 95.6
         OBJETIVO_NPS = 87.0
         ssi_actual = df_filtrado['SSI_Num'].mean()
         nps_actual = calcular_nps(df_filtrado[col_nps])
 
+        # Render de los relojes generales
         col1, col2 = st.columns(2)
         with col1: st.plotly_chart(crear_reloj(ssi_actual, "Indicador SSI (Objetivo: 95.6)", OBJETIVO_SSI, 100), use_container_width=True)
         with col2: st.plotly_chart(crear_reloj(nps_actual, "Indicador NPS (Objetivo: 87%)", OBJETIVO_NPS, 100), use_container_width=True)
+
+        st.markdown("---") # Línea divisoria sutil
+        st.write(f"### Desempeño Mensual - Boca de Venta: {boca_sel} | Año: {año_sel}")
+        
+        # Procesamiento para la evolución mensual
+        df_mensual = df_filtrado.sort_values('Mes_Num').groupby('Mes_Nombre', sort=False) if 'Mes_Num' in df_filtrado.columns else df_filtrado.groupby('Mes_Nombre', sort=False)
+        resumen_mensual = []
+        for mes, grupo in df_mensual:
+            fila = {'Mes': mes.capitalize(), 'Q encuestas': len(grupo), 'SSI Puro': grupo['SSI_Num'].mean(), 'NPS dealer': calcular_nps(grupo[col_nps])}
+            for c in cols_subindices: fila[c] = grupo[c].mean()
+            resumen_mensual.append(fila)
+
+        df_tabla_mensual = pd.DataFrame(resumen_mensual)
+        if not df_tabla_mensual.empty:
+            # Gráfico de doble eje (Barras + Líneas)
+            fig_evolucion = go.Figure()
+            
+            fig_evolucion.add_trace(go.Bar(
+                x=df_tabla_mensual['Mes'], y=df_tabla_mensual['Q encuestas'], 
+                name='Cant. Encuestas', marker_color='rgba(169, 169, 169, 0.3)', 
+                yaxis='y2', text=df_tabla_mensual['Q encuestas'].apply(lambda x: f"<b>{x}</b>"), textposition='auto',
+                textfont=dict(color='white', size=12)
+            ))
+            
+            fig_evolucion.add_trace(go.Scatter(
+                x=df_tabla_mensual['Mes'], y=df_tabla_mensual['SSI Puro'], 
+                mode='lines+markers+text', name='SSI Puro', line=dict(color='#3498db', width=3), 
+                text=df_tabla_mensual['SSI Puro'].apply(lambda x: f"<b>{x:.1f}</b>"), textposition='top center',
+                textfont=dict(color='white', size=12)
+            ))
+            
+            fig_evolucion.add_trace(go.Scatter(
+                x=df_tabla_mensual['Mes'], y=df_tabla_mensual['NPS dealer'], 
+                mode='lines+markers+text', name='NPS dealer', line=dict(color='#2ecc71', width=3), 
+                text=df_tabla_mensual['NPS dealer'].apply(lambda x: f"<b>{x:.1f}%</b>" if pd.notna(x) else ""), textposition='bottom center',
+                textfont=dict(color='white', size=12)
+            ))
+            
+            max_encuestas = df_tabla_mensual['Q encuestas'].max()
+            fig_evolucion.update_layout(
+                title="Evolución de SSI, NPS y Volumen de Encuestas",
+                yaxis=dict(title="Puntaje / Porcentaje", range=[0, 110]),
+                yaxis2=dict(title="Cantidad de Encuestas", overlaying='y', side='right', range=[0, max(10, max_encuestas * 1.5)], showgrid=False),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)"
+            )
+            st.plotly_chart(fig_evolucion, use_container_width=True)
+
+            # Tabla resumen de la evolución mensual
+            totales = {'Mes': 'Total', 'Q encuestas': df_tabla_mensual['Q encuestas'].sum(), 'SSI Puro': df_filtrado['SSI_Num'].mean(), 'NPS dealer': calcular_nps(df_filtrado[col_nps])}
+            for c in cols_subindices: totales[c] = df_filtrado[c].mean()
+            df_tabla_mensual.loc[len(df_tabla_mensual)] = totales
+
+            formatos = {'Q encuestas': '{:.0f}', 'SSI Puro': '{:.1f}', 'NPS dealer': '{:.1f}%'}
+            for c in cols_subindices: formatos[c] = '{:.1f}'
+            
+            st.dataframe(
+                df_tabla_mensual.style.format(formatos, na_rep="-")
+                .apply(lambda x: ['font-weight: bold; border-top: 1px solid gray;' if x['Mes'] == 'Total' else '' for i in x], axis=1)
+                .map(lambda val: 'color: #2ecc71; font-weight: bold;' if pd.notna(val) and val >= OBJETIVO_SSI else ('color: #e74c3c; font-weight: bold;' if pd.notna(val) else ''), subset=['SSI Puro'])
+                .map(lambda val: 'color: #2ecc71; font-weight: bold;' if pd.notna(val) and val >= OBJETIVO_NPS else ('color: #e74c3c; font-weight: bold;' if pd.notna(val) else ''), subset=['NPS dealer']),
+                use_container_width=True, hide_index=True
+            )
 
     # --- PESTAÑA 2: RANKING 0KM ---
     with tab_ranking:
@@ -190,72 +253,7 @@ if not df_ventas_raw.empty:
             )
             st.plotly_chart(fig_ranking, use_container_width=True)
 
-    # --- PESTAÑA 3: EVOLUCIÓN MENSUAL 0KM ---
-    with tab_evolucion:
-        st.write(f"### Desempeño Mensual - Boca de Venta: {boca_sel} | Año: {año_sel}")
-        df_mensual = df_filtrado.sort_values('Mes_Num').groupby('Mes_Nombre', sort=False) if 'Mes_Num' in df_filtrado.columns else df_filtrado.groupby('Mes_Nombre', sort=False)
-        resumen_mensual = []
-        for mes, grupo in df_mensual:
-            fila = {'Mes': mes.capitalize(), 'Q encuestas': len(grupo), 'SSI Puro': grupo['SSI_Num'].mean(), 'NPS dealer': calcular_nps(grupo[col_nps])}
-            for c in cols_subindices: fila[c] = grupo[c].mean()
-            resumen_mensual.append(fila)
-
-        df_tabla_mensual = pd.DataFrame(resumen_mensual)
-        if not df_tabla_mensual.empty:
-            # GRÁFICO DE DOBLE EJE (Barras + Líneas)
-            fig_evolucion = go.Figure()
-            
-            # Barras (Eje Secundario) con etiqueta blanca y negrita
-            fig_evolucion.add_trace(go.Bar(
-                x=df_tabla_mensual['Mes'], y=df_tabla_mensual['Q encuestas'], 
-                name='Cant. Encuestas', marker_color='rgba(169, 169, 169, 0.3)', 
-                yaxis='y2', text=df_tabla_mensual['Q encuestas'].apply(lambda x: f"<b>{x}</b>"), textposition='auto',
-                textfont=dict(color='white', size=12)
-            ))
-            
-            # Líneas SSI con etiqueta blanca y negrita
-            fig_evolucion.add_trace(go.Scatter(
-                x=df_tabla_mensual['Mes'], y=df_tabla_mensual['SSI Puro'], 
-                mode='lines+markers+text', name='SSI Puro', line=dict(color='#3498db', width=3), 
-                text=df_tabla_mensual['SSI Puro'].apply(lambda x: f"<b>{x:.1f}</b>"), textposition='top center',
-                textfont=dict(color='white', size=12)
-            ))
-            
-            # Líneas NPS con etiqueta blanca y negrita
-            fig_evolucion.add_trace(go.Scatter(
-                x=df_tabla_mensual['Mes'], y=df_tabla_mensual['NPS dealer'], 
-                mode='lines+markers+text', name='NPS dealer', line=dict(color='#2ecc71', width=3), 
-                text=df_tabla_mensual['NPS dealer'].apply(lambda x: f"<b>{x:.1f}%</b>" if pd.notna(x) else ""), textposition='bottom center',
-                textfont=dict(color='white', size=12)
-            ))
-            
-            max_encuestas = df_tabla_mensual['Q encuestas'].max()
-            fig_evolucion.update_layout(
-                title="Evolución de SSI, NPS y Volumen de Encuestas",
-                yaxis=dict(title="Puntaje / Porcentaje", range=[0, 110]),
-                yaxis2=dict(title="Cantidad de Encuestas", overlaying='y', side='right', range=[0, max(10, max_encuestas * 1.5)], showgrid=False),
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)"
-            )
-            st.plotly_chart(fig_evolucion, use_container_width=True)
-
-            totales = {'Mes': 'Total', 'Q encuestas': df_tabla_mensual['Q encuestas'].sum(), 'SSI Puro': df_filtrado['SSI_Num'].mean(), 'NPS dealer': calcular_nps(df_filtrado[col_nps])}
-            for c in cols_subindices: totales[c] = df_filtrado[c].mean()
-            df_tabla_mensual.loc[len(df_tabla_mensual)] = totales
-
-            formatos = {'Q encuestas': '{:.0f}', 'SSI Puro': '{:.1f}', 'NPS dealer': '{:.1f}%'}
-            for c in cols_subindices: formatos[c] = '{:.1f}'
-            
-            # Formato de Fila Totales en la Tabla
-            st.dataframe(
-                df_tabla_mensual.style.format(formatos, na_rep="-")
-                .apply(lambda x: ['font-weight: bold; border-top: 1px solid gray;' if x['Mes'] == 'Total' else '' for i in x], axis=1)
-                .map(lambda val: 'color: #2ecc71; font-weight: bold;' if pd.notna(val) and val >= OBJETIVO_SSI else ('color: #e74c3c; font-weight: bold;' if pd.notna(val) else ''), subset=['SSI Puro'])
-                .map(lambda val: 'color: #2ecc71; font-weight: bold;' if pd.notna(val) and val >= OBJETIVO_NPS else ('color: #e74c3c; font-weight: bold;' if pd.notna(val) else ''), subset=['NPS dealer']),
-                use_container_width=True, hide_index=True
-            )
-
-    # --- PESTAÑA 4: COMISIONES 0KM ---
+    # --- PESTAÑA 3: COMISIONES 0KM ---
     with tab_comisiones:
         st.write("### 💰 Tabla de Cálculo de Comisiones SSI")
         if not col_atencion_vend: st.error("No se detectó la columna '02 Atencion Vendedor' en los datos.")
@@ -281,7 +279,7 @@ if not df_ventas_raw.empty:
                 )
             else: st.warning("Datos insuficientes para el cálculo de comisiones.")
 
-    # --- PESTAÑA 5: USADOS CERTIFICADOS (UCT) ---
+    # --- PESTAÑA 4: USADOS CERTIFICADOS (UCT) ---
     with tab_usados:
         st.write("### 🚗 Gestión de Calidad: Toyota Usados Certificados (UCT)")
         st.write("Métricas exclusivas y evolución de satisfacción para el canal de Usados.")
@@ -338,7 +336,6 @@ if not df_ventas_raw.empty:
                     
                     fig_evo_u = go.Figure()
                     
-                    # Barras de Encuestas UCT
                     fig_evo_u.add_trace(go.Bar(
                         x=df_res_u['Mes'], y=df_res_u['Q encuestas'], 
                         name='Cant. Encuestas', marker_color='rgba(169, 169, 169, 0.3)', 
@@ -346,7 +343,6 @@ if not df_ventas_raw.empty:
                         textfont=dict(color='white', size=12)
                     ))
                     
-                    # Líneas SSI y NPS UCT
                     fig_evo_u.add_trace(go.Scatter(
                         x=df_res_u['Mes'], y=df_res_u['SSI UCT'], 
                         mode='lines+markers+text', name='SSI UCT', line=dict(color='#3498db', width=3), 
@@ -377,7 +373,6 @@ if not df_ventas_raw.empty:
                     formatos_u = {'Q encuestas': '{:.0f}', 'SSI UCT': '{:.1f}', 'NPS UCT': '{:.1f}%'}
                     for c in top_5_cols: formatos_u[c] = '{:.1f}'
                     
-                    # Formato Condicional y Total UCT
                     st.dataframe(
                         df_res_u.style.format(formatos_u, na_rep="-")
                         .apply(lambda x: ['font-weight: bold; border-top: 1px solid gray;' if x['Mes'] == 'Total' else '' for i in x], axis=1)
