@@ -155,16 +155,16 @@ if not df_ventas_raw.empty:
     if boca_sel != "Todas": df_filtrado = df_filtrado[df_filtrado[col_sucursal].astype(str) == boca_sel]
     if meses_sel: df_filtrado = df_filtrado[df_filtrado['Mes_Período'].isin(meses_sel)]
 
-    # Clasificar el NPS y limpiar los comentarios para la burbuja
     df_filtrado['Estado_NPS'] = df_filtrado[col_nps].apply(obtener_estado_nps)
     df_filtrado['Comentario_Cliente'] = df_filtrado[col_comentario_0km].fillna("Sin comentarios")
 
     # 5. Creación de Pestañas
-    tab_convencional, tab_ranking, tab_comisiones, tab_usados = st.tabs([
+    tab_convencional, tab_ranking, tab_comisiones, tab_usados, tab_criterios = st.tabs([
         "📊 Venta Convencional 0km", 
         "🏆 Ranking Vendedores", 
         "💰 Comisiones SSI",
-        "🚗 Usados Certificados"
+        "🚗 Usados Certificados",
+        "📋 Criterios de Puntaje"
     ])
 
     # --- PESTAÑA 1: VENTA CONVENCIONAL 0KM ---
@@ -237,7 +237,6 @@ if not df_ventas_raw.empty:
                 use_container_width=True, hide_index=True
             )
             
-            # NUEVO GRÁFICO: Detalle de NPS (Burbujas)
             st.write("#### 💬 Detalle de Encuestas NPS (0km)")
             st.info("💡 Pasa el mouse sobre los puntos o haz clic en ellos para leer el comentario completo, el nombre del cliente y su clasificación.")
             
@@ -331,13 +330,11 @@ if not df_ventas_raw.empty:
         if not df_usados_raw.empty:
             columnas_u = df_usados_raw.columns.tolist()
             
-            # Coordenadas exactas indicadas para UCT
             col_nps_u = columnas_u[-1]
             col_ssi_u = next((c for c in columnas_u if 'ssi' in c.lower()), columnas_u[0])
             col_fecha_u = "Mes" if "Mes" in columnas_u else columnas_u[2]
             top_5_cols = columnas_u[5:10] if len(columnas_u) >= 10 else []
             
-            # Detección de Cliente y Comentario UCT (Columna P = Índice 15)
             col_cliente_u = next((c for c in columnas_u if 'cliente' in c.lower() or 'nombre' in c.lower() or 'razon' in c.lower()), columnas_u[0])
             col_comentario_uct = columnas_u[15] if len(columnas_u) > 15 else columnas_u[-1]
             
@@ -354,7 +351,6 @@ if not df_ventas_raw.empty:
             for c in top_5_cols:
                 df_u_filt[c] = pd.to_numeric(df_u_filt[c].astype(str).str.replace(',', '.').str.replace('%', ''), errors='coerce')
                 
-            # Clasificación y limpieza para la burbuja UCT
             df_u_filt['Estado_NPS'] = df_u_filt[col_nps_u].apply(obtener_estado_nps)
             df_u_filt['Comentario_Cliente'] = df_u_filt[col_comentario_uct].fillna("Sin comentarios")
                 
@@ -434,7 +430,6 @@ if not df_ventas_raw.empty:
                         use_container_width=True, hide_index=True
                     )
                     
-                    # NUEVO GRÁFICO: Detalle de NPS (Burbujas)
                     st.write("#### 💬 Detalle de Encuestas NPS (UCT)")
                     st.info("💡 Pasa el mouse sobre los puntos o haz clic en ellos para leer el comentario completo, el nombre del cliente y su clasificación.")
                     
@@ -469,6 +464,76 @@ if not df_ventas_raw.empty:
                 st.error("No se encontraron las columnas F a J (índices 5 al 9) en la hoja de Usados.")
         else:
             st.warning("No se pudo cargar la hoja USADO26. Verifica que la URL o el nombre de la hoja sean correctos.")
+
+    # --- PESTAÑA 5: CRITERIOS DE ASIGNACIÓN DE PUNTAJE (NUEVA) ---
+    with tab_criterios:
+        st.write("### 📋 Criterios de Asignación de Puntaje")
+        st.write("Resumen de las métricas y porcentajes de alcance para el cálculo de objetivos y comisiones.")
+        st.markdown("---")
+
+        col_ventas, col_usados = st.columns(2)
+
+        with col_ventas:
+            st.markdown("#### 🚗 Ventas Convencional (0km)")
+
+            st.markdown("**1. Sales Satisfaction Index (SSI)**")
+            st.markdown("""
+            | % de Alcance (SSI YTD) | % Cantidad de Encuestas | % de Puntos |
+            | :--- | :--- | :--- |
+            | ≥ 95,6% | ≥ % Promedio RED | 100% |
+            | ≥ 95,6% | < % Promedio RED | 75% |
+            | 95,6% > X ≥ 95% | ≥ % Promedio RED | 75% |
+            | 95,6% > X ≥ 95% | < % Promedio RED | 50% |
+            | 95% > X ≥ 94,5% | ≥ % Promedio RED | 50% |
+            | 95% > X ≥ 94,5% | < % Promedio RED | 25% |
+            | < 94,5% | - | 0% |
+            """)
+
+            st.markdown("**2. Net Promoter Score (NPS)**")
+            st.markdown("""
+            | % de Alcance (NPS YTD) | % de Puntos |
+            | :--- | :--- |
+            | ≥ 87% | 100% |
+            | 82% < X ≤ 87% | 50% |
+            | < 82% | 0% |
+            """)
+
+            st.markdown("**3. Índice de Contención de Quejas (ICQ)**")
+            st.markdown("""
+            | Estado (ICQ Ventas) | % de Puntos |
+            | :--- | :--- |
+            | ≤ 0,05 | 100% |
+            | 0,05 a 0,15 | 75% |
+            | 0,15 a 0,30 | 50% |
+            | > 0,30 | 0% |
+            """)
+
+        with col_usados:
+            st.markdown("#### 🚙 Usados Certificados (UCT)")
+
+            st.markdown("**1. Sales Satisfaction Index (SSI)**")
+            st.markdown("""
+            | Rdo. SSI YTD | Cant. de Encuestas | % de Puntos |
+            | :--- | :--- | :--- |
+            | ≥ 94,5% | ≥ 30% | 100% |
+            | ≥ 94,5% | 30% - 25% | 75% |
+            | 94,5% - 89% | ≥ 30% | 75% |
+            | 94,5% - 89% | 30% - 25% | 50% |
+            | < 89% | < 25% | 0% |
+            """)
+            st.caption("*Superar el 89% en el SSI YTD y tener un mínimo del 25% de respuestas sobre base de clientes de UCT es condición necesaria para recibir puntaje.*")
+
+            st.markdown("**2. Net Promoter Score (NPS)**")
+            st.markdown("""
+            | Rdo. NPS YTD | Cant. de Encuestas | % de Puntos |
+            | :--- | :--- | :--- |
+            | ≥ 89% | ≥ 30% | 100% |
+            | ≥ 89% | 30% - 25% | 75% |
+            | 89% - 84% | ≥ 30% | 75% |
+            | 89% - 84% | 30% - 25% | 50% |
+            | < 84% | < 25% | 0% |
+            """)
+            st.caption("*Superar el 84% en el NPS YTD y tener un mínimo del 25% de respuestas sobre base de clientes de UCT es condición necesaria para recibir puntaje.*")
 
 else:
     st.warning("No se pudo leer la hoja VENTAS26 o está vacía.")
