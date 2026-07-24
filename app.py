@@ -81,8 +81,8 @@ def crear_reloj(valor, titulo, objetivo, max_val, color_ok="#2ecc71", color_bad=
         number={'suffix': "%" if "NPS" in titulo else "", 'font': {'size': 40, 'color': color_actual}},
         delta={'reference': objetivo, 'increasing': {'color': color_ok}, 'decreasing': {'color': color_bad}},
         title={'text': titulo, 'font': {'size': 20}},
-        gauge={'axis': {'range': [None, max_val], 'tickwidth': 1}, 'bar': {'color': color_actual},
-               'steps': [{'range': [0, objetivo], 'color': 'rgba(255,255,255,0.1)'}, {'range': [objetivo, max_val], 'color': 'rgba(255,255,255,0.2)'}],
+        gauge={'axis': {'range': [-100 if "NPS" in titulo else 0, max_val], 'tickwidth': 1}, 'bar': {'color': color_actual},
+               'steps': [{'range': [-100 if "NPS" in titulo else 0, objetivo], 'color': 'rgba(255,255,255,0.1)'}, {'range': [objetivo, max_val], 'color': 'rgba(255,255,255,0.2)'}],
                'threshold': {'line': {'color': "white", 'width': 4}, 'thickness': 0.75, 'value': objetivo}}
     ))
     fig.update_layout(height=350, margin=dict(l=20, r=20, t=50, b=20), paper_bgcolor="rgba(0,0,0,0)", font={'color': "white"})
@@ -111,7 +111,7 @@ if not df_ventas_raw.empty:
     col_sucursal_detectada = next((c for c in columnas_disponibles if 'boca' in c.lower() or 'sucursal' in c.lower() or 'concesionario' in c.lower()), columnas_disponibles[0])
     col_sucursal = st.sidebar.selectbox("Columna Boca de Venta:", columnas_disponibles, index=columnas_disponibles.index(col_sucursal_detectada))
 
-    # Detectar Cliente y Comentario 0km (Columna AE = Índice 30)
+    # Detectar Cliente y Comentario 0km
     col_cliente = next((c for c in columnas_disponibles if 'cliente' in c.lower() or 'nombre' in c.lower() or 'razon' in c.lower()), columnas_disponibles[0])
     col_comentario_0km = columnas_disponibles[30] if len(columnas_disponibles) > 30 else columnas_disponibles[-1]
 
@@ -215,7 +215,7 @@ if not df_ventas_raw.empty:
             max_encuestas = df_tabla_mensual['Q encuestas'].max()
             fig_evolucion.update_layout(
                 title="Evolución de SSI, NPS y Volumen de Encuestas",
-                yaxis=dict(title="Puntaje / Porcentaje", range=[0, 110]),
+                yaxis=dict(title="Puntaje / Porcentaje", range=[-100, 110]),
                 yaxis2=dict(title="Cantidad de Encuestas", overlaying='y', side='right', range=[0, max(10, max_encuestas * 1.5)], showgrid=False),
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
                 paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)"
@@ -290,7 +290,7 @@ if not df_ventas_raw.empty:
             ))
             
             fig_ranking.update_layout(
-                barmode='group', xaxis_title="Vendedor", yaxis=dict(title="Puntaje", range=[0, 110]), 
+                barmode='group', xaxis_title="Vendedor", yaxis=dict(title="Puntaje", range=[-100, 110]), 
                 yaxis2=dict(title="Encuestas", overlaying='y', side='right', range=[0, df_resumen['Encuestas'].max() * 1.5], showgrid=False), 
                 paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)"
             )
@@ -305,7 +305,7 @@ if not df_ventas_raw.empty:
             for vend, grupo in df_filtrado.groupby(col_vendedor):
                 cant_encuestas, ssi_promedio, atencion_promedio = len(grupo), grupo['SSI_Num'].mean(), grupo[col_atencion_vend].mean()
                 if pd.isna(atencion_promedio) or cant_encuestas == 0: comision = 0.00
-                elif atencion_promedio*10 < 95.5: comision = -0.05
+                elif atencion_promedio < 95.6: comision = -0.05
                 else: comision = 0.01
                 datos_comision.append({
                     'Vendedor': vend, 'Cantidad de Encuestas': cant_encuestas,
@@ -408,7 +408,7 @@ if not df_ventas_raw.empty:
                     max_encuestas_u = df_res_u['Q encuestas'].max()
                     fig_evo_u.update_layout(
                         title="Evolución de SSI, NPS y Volumen de Encuestas (UCT)",
-                        yaxis=dict(title="Puntaje / Porcentaje", range=[0, 110]),
+                        yaxis=dict(title="Puntaje / Porcentaje", range=[-100, 110]),
                         yaxis2=dict(title="Cantidad de Encuestas", overlaying='y', side='right', range=[0, max(10, max_encuestas_u * 1.5)], showgrid=False),
                         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
                         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)"
@@ -465,7 +465,7 @@ if not df_ventas_raw.empty:
         else:
             st.warning("No se pudo cargar la hoja USADO26. Verifica que la URL o el nombre de la hoja sean correctos.")
 
-    # --- PESTAÑA 5: CRITERIOS DE ASIGNACIÓN DE PUNTAJE (NUEVA) ---
+    # --- PESTAÑA 5: CRITERIOS DE ASIGNACIÓN DE PUNTAJE ---
     with tab_criterios:
         st.write("### 📋 Criterios de Asignación de Puntaje")
         st.write("Resumen de las métricas y porcentajes de alcance para el cálculo de objetivos y comisiones.")
