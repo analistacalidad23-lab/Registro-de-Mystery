@@ -170,11 +170,36 @@ if not df_ventas_raw.empty:
     df_filtrado['Estado_NPS'] = df_filtrado[col_nps].apply(obtener_estado_nps)
     df_filtrado['Comentario_Cliente'] = df_filtrado[col_comentario_0km].fillna("Sin comentarios")
 
+    # ---------------------------------------------------------
+    # PROCESAMIENTO GLOBAL DE TPA (Para Comisiones y Pestaña TPA)
+    # ---------------------------------------------------------
+    df_t_proc = None
+    if not df_tpa_raw.empty:
+        columnas_tpa = df_tpa_raw.columns.tolist()
+        
+        col_mes_t = columnas_tpa[7] if len(columnas_tpa) > 7 else next((c for c in columnas_tpa if 'mes' in c.lower() or 'fecha' in c.lower()), columnas_tpa[0])
+        col_cliente_t = columnas_tpa[9] if len(columnas_tpa) > 9 else next((c for c in columnas_tpa if 'suscriptor' in c.lower() or 'cliente' in c.lower() or 'nombre' in c.lower()), columnas_tpa[0])
+        col_suc_t = columnas_tpa[23] if len(columnas_tpa) > 23 else next((c for c in columnas_tpa if 'sucursal' in c.lower() or 'boca' in c.lower()), columnas_tpa[0])
+        col_vend_t = columnas_tpa[31] if len(columnas_tpa) > 31 else next((c for c in columnas_tpa if 'vendedor' in c.lower() or 'asesor' in c.lower()), columnas_tpa[0])
+        col_coment_t = columnas_tpa[36] if len(columnas_tpa) > 36 else next((c for c in columnas_tpa if 'comentario' in c.lower() or 'observaci' in c.lower()), columnas_tpa[0])
+        col_estado_t = columnas_tpa[40] if len(columnas_tpa) > 40 else next((c for c in columnas_tpa if 'nps' in c.lower() or 'estado' in c.lower() or 'promotor' in c.lower() or 'detractor' in c.lower()), columnas_tpa[-1])
+        
+        df_t_proc = df_tpa_raw.copy()
+        df_t_proc = df_t_proc.dropna(subset=[col_mes_t])
+        df_t_proc['Mes_Filtro'] = df_t_proc[col_mes_t].astype(str).str.strip().str.capitalize()
+        
+        meses_orden = { 'Enero': 1, 'Febrero': 2, 'Marzo': 3, 'Abril': 4, 'Mayo': 5, 'Junio': 6, 'Julio': 7, 'Agosto': 8, 'Septiembre': 9, 'Octubre': 10, 'Noviembre': 11, 'Diciembre': 12 }
+        df_t_proc['Mes_Num'] = df_t_proc['Mes_Filtro'].map(meses_orden).fillna(99)
+        df_t_proc = df_t_proc.sort_values('Mes_Num')
+        
+        df_t_proc['Estado_NPS'] = df_t_proc[col_estado_t].apply(lambda x: str(x).strip().capitalize() if pd.notna(x) else 'Sin dato')
+        df_t_proc['Estado_NPS'] = df_t_proc['Estado_NPS'].replace({'Promotores': 'Promotor', 'Detractores': 'Detractor', 'Neutros': 'Neutro'})
+
     # 5. Creación de Pestañas
     tab_convencional, tab_ranking, tab_comisiones, tab_usados, tab_tpa, tab_criterios = st.tabs([
         "📊 Venta Convencional 0km", 
         "🏆 Ranking Vendedores", 
-        "💰 Comisiones SSI",
+        "💰 Comisiones",
         "🚗 Usados Certificados",
         "📘 Plan de Ahorro (TPA)",
         "📋 Criterios de Puntaje"
@@ -326,9 +351,9 @@ if not df_ventas_raw.empty:
             )
             st.plotly_chart(fig_ranking, use_container_width=True)
 
-    # --- PESTAÑA 3: COMISIONES 0KM ---
+    # --- PESTAÑA 3: COMISIONES (0KM Y TPA) ---
     with tab_comisiones:
-        st.write("### 💰 Tabla de Cálculo de Comisiones SSI")
+        st.write("### 💰 Tabla de Cálculo de Comisiones SSI (0km)")
         if not col_atencion_vend: st.error("No se detectó la columna '02 Atencion Vendedor' en los datos.")
         else:
             datos_comision = []
@@ -351,6 +376,55 @@ if not df_ventas_raw.empty:
                     use_container_width=True, hide_index=True
                 )
             else: st.warning("Datos insuficientes para el cálculo de comisiones.")
+
+        st.markdown("---")
+        st.write("### 💰 Tabla de Cálculo de Comisiones NPS (Toyota Plan de Ahorro)")
+        
+        if df_t_proc is not None:
+            st.write("#### 🔍 Filtro de Período (Comisiones TPA)")
+            meses_disp_tpa_com = [m for m in df_t_proc['Mes_Filtro'].unique() if m.lower() != 'nan']
+            mes_sel_tpa_com = st.multiselect("Seleccionar Meses (TPA):", meses_disp_tpa_com, default=meses_disp_tpa_com, key="filtro_mes_tpa_com")
+            
+            df_tpa_comision = df_t_proc.copy()
+            if mes_sel_tpa_com:
+                df_tpa_comision = df_tpa_comision[df_tpa_comision['Mes_Filtro'].isin(mes_sel_tpa_com)]
+                
+            # Filtro estricto: Solo contamos promotores, neutros y detractores para la comisión
+            df_nps_valid_com = df_tpa_comision[df_tpa_comision['Estado_NPS'].isin(['Promotor', 'Neutro', 'Detractor'])]
+            
+            datos_comision_tpa = []
+            for vend, grupo in df_nps_valid_com.groupby(col_vend_t):
+                cant_encuestas = len(grupo)
+                if cant_encuestas == 0: continue
+                
+                nps_vendedor = calcular_nps_texto(grupo['Estado_NPS'])
+                
+                comision = 0.00
+                if pd.notna(nps_vendedor):
+                    if nps_vendedor >= 85.0:
+                        comision = 0.01
+                    else:
+                        comision = -0.05
+                        
+                datos_comision_tpa.append({
+                    'Vendedor': vend,
+                    'Cantidad de Encuestas': cant_encuestas,
+                    'NPS Promedio': nps_vendedor,
+                    'Comisión TPA': comision
+                })
+                
+            df_comisiones_tpa = pd.DataFrame(datos_comision_tpa)
+            if not df_comisiones_tpa.empty:
+                df_comisiones_tpa = df_comisiones_tpa.sort_values('NPS Promedio', ascending=False)
+                st.dataframe(
+                    df_comisiones_tpa.style.format({'NPS Promedio': '{:.1f}%', 'Comisión TPA': '{:.2f}'})
+                    .map(lambda val: 'color: #e74c3c; font-weight: bold;' if val == -0.05 else ('color: #2ecc71; font-weight: bold;' if val == 0.01 else 'color: #7f8c8d;'), subset=['Comisión TPA']),
+                    use_container_width=True, hide_index=True
+                )
+            else:
+                st.warning("No hay encuestas válidas de TPA en el período seleccionado para calcular comisiones.")
+        else:
+            st.warning("No se pudo cargar la hoja de TPA. Verifica que el enlace sea correcto.")
 
     # --- PESTAÑA 4: USADOS CERTIFICADOS (UCT) ---
     with tab_usados:
@@ -511,35 +585,10 @@ if not df_ventas_raw.empty:
         st.write("### 📘 Gestión de Calidad: Toyota Plan de Ahorro (TPA)")
         st.write("Métricas y evolución de satisfacción exclusiva para TPA.")
         
-        if not df_tpa_raw.empty:
-            columnas_tpa = df_tpa_raw.columns.tolist()
-            
-            col_mes_t = columnas_tpa[7] if len(columnas_tpa) > 7 else next((c for c in columnas_tpa if 'mes' in c.lower() or 'fecha' in c.lower()), columnas_tpa[0])
-            col_cliente_t = columnas_tpa[9] if len(columnas_tpa) > 9 else next((c for c in columnas_tpa if 'suscriptor' in c.lower() or 'cliente' in c.lower() or 'nombre' in c.lower()), columnas_tpa[0])
-            col_suc_t = columnas_tpa[23] if len(columnas_tpa) > 23 else next((c for c in columnas_tpa if 'sucursal' in c.lower() or 'boca' in c.lower()), columnas_tpa[0])
-            col_vend_t = columnas_tpa[31] if len(columnas_tpa) > 31 else next((c for c in columnas_tpa if 'vendedor' in c.lower() or 'asesor' in c.lower()), columnas_tpa[0])
-            col_coment_t = columnas_tpa[36] if len(columnas_tpa) > 36 else next((c for c in columnas_tpa if 'comentario' in c.lower() or 'observaci' in c.lower()), columnas_tpa[0])
-            col_estado_t = columnas_tpa[40] if len(columnas_tpa) > 40 else next((c for c in columnas_tpa if 'nps' in c.lower() or 'estado' in c.lower() or 'promotor' in c.lower() or 'detractor' in c.lower()), columnas_tpa[-1])
-            
-            df_t_proc = df_tpa_raw.copy()
-            df_t_proc = df_t_proc.dropna(subset=[col_mes_t])
-            df_t_proc['Mes_Filtro'] = df_t_proc[col_mes_t].astype(str).str.strip().str.capitalize()
-            
-            # --- ORDENAMIENTO CRONOLÓGICO DE MESES ---
-            meses_orden = {
-                'Enero': 1, 'Febrero': 2, 'Marzo': 3, 'Abril': 4, 'Mayo': 5, 'Junio': 6,
-                'Julio': 7, 'Agosto': 8, 'Septiembre': 9, 'Octubre': 10, 'Noviembre': 11, 'Diciembre': 12
-            }
-            df_t_proc['Mes_Num'] = df_t_proc['Mes_Filtro'].map(meses_orden).fillna(99)
-            df_t_proc = df_t_proc.sort_values('Mes_Num')
-            
-            df_t_proc['Estado_NPS'] = df_t_proc[col_estado_t].apply(lambda x: str(x).strip().capitalize() if pd.notna(x) else 'Sin dato')
-            df_t_proc['Estado_NPS'] = df_t_proc['Estado_NPS'].replace({'Promotores': 'Promotor', 'Detractores': 'Detractor', 'Neutros': 'Neutro'})
-            
+        if df_t_proc is not None:
             st.write("#### 🔍 Filtros de Período y Sucursal (TPA)")
             filtro_t1, filtro_t2 = st.columns(2)
             with filtro_t1:
-                # Los meses aparecerán ordenados cronológicamente gracias al sort_values anterior
                 meses_disp_t = [m for m in df_t_proc['Mes_Filtro'].unique() if m.lower() != 'nan']
                 mes_sel_t = st.multiselect("Seleccionar Meses (TPA):", meses_disp_t, default=meses_disp_t)
             with filtro_t2:
@@ -571,7 +620,6 @@ if not df_ventas_raw.empty:
             
             st.write("#### 📊 Evolución del NPS (TPA)")
             
-            # Agrupamos sobre la base de datos YA LIMPIA (solo encuestas válidas)
             df_t_mensual = df_nps_valid_t.groupby('Mes_Filtro', sort=False)
             res_t = []
             for mes, grupo in df_t_mensual:
