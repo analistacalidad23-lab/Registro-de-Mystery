@@ -242,10 +242,8 @@ if not df_ventas_raw.empty:
             st.write("---")
             st.write("### 💬 Distribución y Detalle de NPS (0km)")
             
-            # --- NUEVO DISEÑO: Gráficos de Torta y Tabla de Detalle ---
             pie_col1, pie_col2 = st.columns(2)
             
-            # Gráfico de Torta Global
             df_nps_valid = df_filtrado[df_filtrado['Estado_NPS'] != 'Sin Dato']
             
             fig_pie_global = px.pie(
@@ -258,7 +256,6 @@ if not df_ventas_raw.empty:
             fig_pie_global.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(color='white'))
             pie_col1.plotly_chart(fig_pie_global, use_container_width=True)
             
-            # Gráfico Sunburst (Por Sucursal)
             fig_pie_sucursal = px.sunburst(
                 df_nps_valid, path=[col_sucursal, 'Estado_NPS'],
                 title='Distribución de NPS por Sucursal',
@@ -268,17 +265,14 @@ if not df_ventas_raw.empty:
             fig_pie_sucursal.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(color='white'))
             pie_col2.plotly_chart(fig_pie_sucursal, use_container_width=True)
             
-            # Tabla de Detalles (Ordenada Detractor -> Neutro -> Promotor)
             st.write("#### 📋 Registro Detallado de Clientes")
             
             columnas_tabla = [col_cliente, 'Comentario_Cliente', col_sucursal, col_vendedor, 'Mes_Período', 'Estado_NPS', col_nps]
             df_tabla_nps = df_nps_valid[columnas_tabla].copy()
             
-            # Ordenamiento jerárquico
             df_tabla_nps['Orden_Gravedad'] = df_tabla_nps['Estado_NPS'].map({'Detractor': 1, 'Neutro': 2, 'Promotor': 3})
             df_tabla_nps = df_tabla_nps.sort_values(by=['Orden_Gravedad', 'Mes_Período']).drop(columns=['Orden_Gravedad'])
             
-            # Renombrar columnas para la tabla final
             df_tabla_nps = df_tabla_nps.rename(columns={
                 col_cliente: 'Nombre del Cliente',
                 'Comentario_Cliente': 'Comentario del Cliente',
@@ -289,7 +283,6 @@ if not df_ventas_raw.empty:
                 col_nps: 'Nota NPS'
             })
             
-            # Aplicar colores a la clasificación en la tabla
             def color_clasificacion(val):
                 if val == 'Detractor': return 'color: #e74c3c; font-weight: bold;'
                 elif val == 'Promotor': return 'color: #2ecc71; font-weight: bold;'
@@ -371,7 +364,6 @@ if not df_ventas_raw.empty:
         if not df_usados_raw.empty:
             columnas_u = df_usados_raw.columns.tolist()
             
-            # Coordenadas exactas indicadas para UCT
             col_nps_u = columnas_u[-1]
             col_ssi_u = next((c for c in columnas_u if 'ssi' in c.lower()), columnas_u[0])
             col_fecha_u = "Mes" if "Mes" in columnas_u else columnas_u[2]
@@ -380,7 +372,6 @@ if not df_ventas_raw.empty:
             col_cliente_u = next((c for c in columnas_u if 'cliente' in c.lower() or 'nombre' in c.lower() or 'razon' in c.lower()), columnas_u[0])
             col_comentario_uct = columnas_u[15] if len(columnas_u) > 15 else columnas_u[-1]
             
-            # Detección de Vendedor y Sucursal para UCT
             col_vendedor_u = next((c for c in columnas_u if 'vendedor' in c.lower() or 'asesor' in c.lower()), columnas_u[0])
             col_sucursal_u = next((c for c in columnas_u if 'boca' in c.lower() or 'sucursal' in c.lower() or 'concesionario' in c.lower()), columnas_u[0])
             
@@ -398,7 +389,6 @@ if not df_ventas_raw.empty:
                 bocas_disp_u = sorted(df_u_proc[col_sucursal_u].dropna().astype(str).unique().tolist())
                 boca_sel_u = st.multiselect("Seleccionar Sucursal (USADO26):", bocas_disp_u, default=bocas_disp_u)
             
-            # Aplicar filtros UCT
             df_u_filt = df_u_proc.copy()
             if mes_sel_u: df_u_filt = df_u_filt[df_u_filt['Mes_Filtro'].isin(mes_sel_u)]
             if boca_sel_u: df_u_filt = df_u_filt[df_u_filt[col_sucursal_u].astype(str).isin(boca_sel_u)]
@@ -492,12 +482,10 @@ if not df_ventas_raw.empty:
                     st.write("---")
                     st.write("### 💬 Distribución y Detalle de NPS (UCT)")
                     
-                    # --- NUEVO DISEÑO: Gráficos de Torta y Tabla de Detalle UCT ---
                     pie_u1, pie_u2 = st.columns(2)
                     
                     df_nps_valid_u = df_u_filt[df_u_filt['Estado_NPS'] != 'Sin Dato']
                     
-                    # Gráfico de Torta Global UCT
                     fig_pie_global_u = px.pie(
                         df_nps_valid_u, names='Estado_NPS',
                         title='Distribución General de NPS (UCT)',
@@ -508,7 +496,6 @@ if not df_ventas_raw.empty:
                     fig_pie_global_u.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(color='white'))
                     pie_u1.plotly_chart(fig_pie_global_u, use_container_width=True)
                     
-                    # Gráfico Sunburst (Por Sucursal) UCT
                     fig_pie_sucursal_u = px.sunburst(
                         df_nps_valid_u, path=[col_sucursal_u, 'Estado_NPS'],
                         title='Distribución de NPS por Sucursal (UCT)',
@@ -518,7 +505,6 @@ if not df_ventas_raw.empty:
                     fig_pie_sucursal_u.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(color='white'))
                     pie_u2.plotly_chart(fig_pie_sucursal_u, use_container_width=True)
                     
-                    # Tabla de Detalles (Ordenada) UCT
                     st.write("#### 📋 Registro Detallado de Clientes")
                     
                     columnas_tabla_u = [col_cliente_u, 'Comentario_Cliente', col_sucursal_u, col_vendedor_u, 'Mes_Filtro', 'Estado_NPS', col_nps_u]
@@ -562,7 +548,7 @@ if not df_ventas_raw.empty:
         st.write("Resumen de las métricas y porcentajes de alcance para el cálculo de objetivos y comisiones.")
         st.markdown("---")
 
-        col_ventas, col_usados = st.columns(2)
+        col_ventas, col_usados, col_tpa = st.columns(3)
 
         with col_ventas:
             st.markdown("#### 🚗 Ventas Convencional (0km)")
@@ -625,6 +611,32 @@ if not df_ventas_raw.empty:
             | < 84% | < 25% | 0% |
             """)
             st.caption("*Superar el 84% en el NPS YTD y tener un mínimo del 25% de respuestas sobre base de clientes de UCT es condición necesaria para recibir puntaje.*")
+
+        with col_tpa:
+            st.markdown("#### 📘 Toyota Plan de Ahorro (TPA)")
+
+            st.markdown("**1. Índice de Contención de Quejas (ICQ)**")
+            st.markdown("""
+            | ICQ | PUNTOS |
+            | :--- | :--- |
+            | ≤ 0,10 | 100% |
+            | 0,10 < ICQ ≤ 0,30 | 75% |
+            | 0,30 < ICQ ≤ 0,60 | 50% |
+            | > 0,60 | 0% |
+            """)
+            st.caption("*Condición para Puntuar: Generar al menos 300 suscripciones anuales (evaluado mensualmente).*")
+
+            st.markdown("**2. NPS Transaccional**")
+            st.markdown("""
+            | NPS | Puntos |
+            | :--- | :--- |
+            | ≥ 85% | 100% |
+            | 80% - 84,99% | 75% |
+            | 75% - 79,99% | 50% |
+            | 70% - 74,99% | 25% |
+            | < 70% | 0% |
+            """)
+            st.caption("*Mínimo de respuestas: Carteras ≥ 2.000 clientes (17/mes). Carteras < 2.000 clientes (8/mes).*")
 
 else:
     st.warning("No se pudo leer la hoja VENTAS26 o está vacía.")
