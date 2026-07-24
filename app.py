@@ -305,7 +305,7 @@ if not df_ventas_raw.empty:
             for vend, grupo in df_filtrado.groupby(col_vendedor):
                 cant_encuestas, ssi_promedio, atencion_promedio = len(grupo), grupo['SSI_Num'].mean(), grupo[col_atencion_vend].mean()
                 if pd.isna(atencion_promedio) or cant_encuestas == 0: comision = 0.00
-                elif atencion_promedio*10 < 95.6: comision = -0.05
+                elif atencion_promedio*10 < 95.5: comision = -0.05
                 else: comision = 0.01
                 datos_comision.append({
                     'Vendedor': vend, 'Cantidad de Encuestas': cant_encuestas,
