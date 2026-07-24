@@ -212,11 +212,14 @@ if not df_ventas_raw.empty:
                 textfont=dict(color='white', size=12)
             ))
             
-            max_encuestas = df_tabla_mensual['Q encuestas'].max()
+            # Cálculo proporcional para alinear el cero de las barras con el cero principal
+            y2_max = max(10, df_tabla_mensual['Q encuestas'].max() * 1.5)
+            y2_min = - (100 / 110) * y2_max
+            
             fig_evolucion.update_layout(
                 title="Evolución de SSI, NPS y Volumen de Encuestas",
-                yaxis=dict(title="Puntaje / Porcentaje", range=[-100, 110]),
-                yaxis2=dict(title="Cantidad de Encuestas", overlaying='y', side='right', range=[0, max(10, max_encuestas * 1.5)], showgrid=False),
+                yaxis=dict(title="Puntaje / Porcentaje", range=[-100, 110], zeroline=True, zerolinecolor='rgba(231, 76, 60, 0.5)', zerolinewidth=2),
+                yaxis2=dict(title="Cantidad de Encuestas", overlaying='y', side='right', range=[y2_min, y2_max], showgrid=False, zeroline=False),
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
                 paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)"
             )
@@ -260,6 +263,7 @@ if not df_ventas_raw.empty:
             fig_burbujas_0km.update_layout(
                 yaxis_title="Nota NPS",
                 xaxis_title="Vendedor",
+                yaxis=dict(range=[-100, 110], zeroline=True, zerolinecolor='rgba(231, 76, 60, 0.5)', zerolinewidth=2),
                 paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                 legend_title_text="Clasificación"
             )
@@ -289,9 +293,13 @@ if not df_ventas_raw.empty:
                 text=df_resumen['Encuestas'].apply(lambda x: f"<b>{x}</b>"), textposition='top center', textfont=dict(color='white', size=14)
             ))
             
+            y2_max_rank = max(10, df_resumen['Encuestas'].max() * 1.5)
+            y2_min_rank = - (100 / 110) * y2_max_rank
+
             fig_ranking.update_layout(
-                barmode='group', xaxis_title="Vendedor", yaxis=dict(title="Puntaje", range=[-100, 110]), 
-                yaxis2=dict(title="Encuestas", overlaying='y', side='right', range=[0, df_resumen['Encuestas'].max() * 1.5], showgrid=False), 
+                barmode='group', xaxis_title="Vendedor", 
+                yaxis=dict(title="Puntaje", range=[-100, 110], zeroline=True, zerolinecolor='rgba(231, 76, 60, 0.5)', zerolinewidth=2), 
+                yaxis2=dict(title="Encuestas", overlaying='y', side='right', range=[y2_min_rank, y2_max_rank], showgrid=False, zeroline=False), 
                 paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)"
             )
             st.plotly_chart(fig_ranking, use_container_width=True)
@@ -405,11 +413,13 @@ if not df_ventas_raw.empty:
                         textfont=dict(color='white', size=12)
                     ))
                     
-                    max_encuestas_u = df_res_u['Q encuestas'].max()
+                    y2_max_u = max(10, df_res_u['Q encuestas'].max() * 1.5)
+                    y2_min_u = - (100 / 110) * y2_max_u
+
                     fig_evo_u.update_layout(
                         title="Evolución de SSI, NPS y Volumen de Encuestas (UCT)",
-                        yaxis=dict(title="Puntaje / Porcentaje", range=[-100, 110]),
-                        yaxis2=dict(title="Cantidad de Encuestas", overlaying='y', side='right', range=[0, max(10, max_encuestas_u * 1.5)], showgrid=False),
+                        yaxis=dict(title="Puntaje / Porcentaje", range=[-100, 110], zeroline=True, zerolinecolor='rgba(231, 76, 60, 0.5)', zerolinewidth=2),
+                        yaxis2=dict(title="Cantidad de Encuestas", overlaying='y', side='right', range=[y2_min_u, y2_max_u], showgrid=False, zeroline=False),
                         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
                         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)"
                     )
@@ -453,6 +463,7 @@ if not df_ventas_raw.empty:
                     fig_burbujas_uct.update_layout(
                         yaxis_title="Nota NPS",
                         xaxis_title="Mes de Encuesta",
+                        yaxis=dict(range=[-100, 110], zeroline=True, zerolinecolor='rgba(231, 76, 60, 0.5)', zerolinewidth=2),
                         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                         legend_title_text="Clasificación"
                     )
