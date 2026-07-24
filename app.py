@@ -20,7 +20,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown('<div class="main-title">🎯 Tablero de Gestión: Calidad, NPS y Comisiones</div>', unsafe_allow_html=True)
-st.markdown('<div class="subtitle">Seguimiento de Satisfacción y Lealtad del Cliente - 0km y Usados Certificados</div>', unsafe_allow_html=True)
+st.markdown('<div class="subtitle">Seguimiento de Satisfacción y Lealtad del Cliente: 0km, Usados Certificados y TPA</div>', unsafe_allow_html=True)
 
 # --- BOTÓN DE ACTUALIZACIÓN MANUAL EN BARRA LATERAL ---
 st.sidebar.header("🔄 Sincronización")
@@ -29,10 +29,13 @@ if st.sidebar.button("Actualizar Datos Ahora"):
     st.rerun()
 st.sidebar.markdown("---")
 
-# 2. Conexión de Datos (Ambas Hojas)
-SHEET_ID = "1PGoOlFTN2WuuiEqRk0KPrcLZL6pEcFVeNWo35shsUSA"
-URL_VENTAS = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=VENTAS26"
-URL_USADOS = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=USADO26"
+# 2. Conexión de Datos (Hojas de Google)
+SHEET_ID_VENTAS = "1PGoOlFTN2WuuiEqRk0KPrcLZL6pEcFVeNWo35shsUSA"
+URL_VENTAS = f"https://docs.google.com/spreadsheets/d/{SHEET_ID_VENTAS}/gviz/tq?tqx=out:csv&sheet=VENTAS26"
+URL_USADOS = f"https://docs.google.com/spreadsheets/d/{SHEET_ID_VENTAS}/gviz/tq?tqx=out:csv&sheet=USADO26"
+
+SHEET_ID_TPA = "1-kBeBdC60rBwsV-rUTlVLSnr2kkI4eJzvW0mA_IvtBg"
+URL_TPA = f"https://docs.google.com/spreadsheets/d/{SHEET_ID_TPA}/export?format=csv"
 
 @st.cache_data(ttl=60)
 def cargar_datos(url):
@@ -73,6 +76,15 @@ def obtener_estado_nps(val):
         elif 'detractor' in s: return 'Detractor'
         else: return 'Neutro'
 
+def calcular_nps_texto(serie_estado):
+    if len(serie_estado.dropna()) == 0: return np.nan
+    s_str = serie_estado.astype(str).str.lower()
+    promotores = s_str.str.contains('promotor').sum()
+    detractores = s_str.str.contains('detractor').sum()
+    total = len(s_str.replace(['nan', 'none', ''], pd.NA).dropna())
+    if total == 0: return np.nan
+    return (promotores - detractores) / total * 100.0
+
 def crear_reloj(valor, titulo, objetivo, max_val, color_ok="#2ecc71", color_bad="#e74c3c"):
     valor = 0 if pd.isna(valor) else valor
     color_actual = color_ok if valor >= objetivo else color_bad
@@ -88,14 +100,15 @@ def crear_reloj(valor, titulo, objetivo, max_val, color_ok="#2ecc71", color_bad=
     fig.update_layout(height=350, margin=dict(l=20, r=20, t=50, b=20), paper_bgcolor="rgba(0,0,0,0)", font={'color': "white"})
     return fig
 
-# Cargar ambos dataframes
+# Cargar los dataframes
 df_ventas_raw = cargar_datos(URL_VENTAS)
 df_usados_raw = cargar_datos(URL_USADOS)
+df_tpa_raw = cargar_datos(URL_TPA)
 
 if not df_ventas_raw.empty:
     columnas_disponibles = df_ventas_raw.columns.tolist()
     
-    # 3. Detección Inteligente de Columnas (VENTAS)
+    # Configuración 0km (VENTAS26)
     st.sidebar.header("⚙️ Configuración 0km (VENTAS26)")
     
     col_nps = columnas_disponibles[-1]
@@ -111,13 +124,11 @@ if not df_ventas_raw.empty:
     col_sucursal_detectada = next((c for c in columnas_disponibles if 'boca' in c.lower() or 'sucursal' in c.lower() or 'concesionario' in c.lower()), columnas_disponibles[0])
     col_sucursal = st.sidebar.selectbox("Columna Boca de Venta:", columnas_disponibles, index=columnas_disponibles.index(col_sucursal_detectada))
 
-    # Detectar Cliente y Comentario 0km
     col_cliente = next((c for c in columnas_disponibles if 'cliente' in c.lower() or 'nombre' in c.lower() or 'razon' in c.lower()), columnas_disponibles[0])
     col_comentario_0km = columnas_disponibles[30] if len(columnas_disponibles) > 30 else columnas_disponibles[-1]
 
     df_procesado = df_ventas_raw.copy()
     
-    # Preparar Fechas 0km
     try:
         df_procesado['Fecha_DT'] = pd.to_datetime(df_procesado[col_fecha], errors='coerce')
         df_procesado['Mes_Nombre'] = df_procesado['Fecha_DT'].dt.strftime('%B').str.lower()
@@ -130,7 +141,6 @@ if not df_ventas_raw.empty:
         df_procesado['Año'] = "N/D"
         df_procesado['Mes_Período'] = df_procesado[col_fecha].astype(str)
 
-    # Limpieza de SSI y Subíndices 0km
     df_procesado['SSI_Num'] = pd.to_numeric(df_procesado[col_ssi].astype(str).str.replace(',', '.').str.replace('%', ''), errors='coerce')
     cols_subindices = [c for c in columnas_disponibles if any(x in c for x in ['01', '02', '03', '04', '05', '08', '09', '11'])]
     for c in cols_subindices:
@@ -139,7 +149,7 @@ if not df_ventas_raw.empty:
     col_atencion_vend = next((c for c in cols_subindices if 'atencion' in c.lower() and 'vendedor' in c.lower()), None)
     if not col_atencion_vend: col_atencion_vend = next((c for c in cols_subindices if '02' in c), None)
 
-    # 4. Filtros Globales en Barra Lateral (0km)
+    # Filtros Globales en Barra Lateral (0km)
     st.sidebar.header("🔍 Filtros Generales 0km")
     años_disp = sorted([a for a in df_procesado['Año'].unique() if a != "0"], reverse=True)
     año_sel = st.sidebar.selectbox("Año:", ["Todos"] + años_disp)
@@ -158,12 +168,13 @@ if not df_ventas_raw.empty:
     df_filtrado['Estado_NPS'] = df_filtrado[col_nps].apply(obtener_estado_nps)
     df_filtrado['Comentario_Cliente'] = df_filtrado[col_comentario_0km].fillna("Sin comentarios")
 
-    # 5. Creación de Pestañas
-    tab_convencional, tab_ranking, tab_comisiones, tab_usados, tab_criterios = st.tabs([
+    # 5. Creación de Pestañas (Se suma TPA)
+    tab_convencional, tab_ranking, tab_comisiones, tab_usados, tab_tpa, tab_criterios = st.tabs([
         "📊 Venta Convencional 0km", 
         "🏆 Ranking Vendedores", 
         "💰 Comisiones SSI",
         "🚗 Usados Certificados",
+        "📘 Plan de Ahorro (TPA)",
         "📋 Criterios de Puntaje"
     ])
 
@@ -243,44 +254,31 @@ if not df_ventas_raw.empty:
             st.write("### 💬 Distribución y Detalle de NPS (0km)")
             
             pie_col1, pie_col2 = st.columns(2)
-            
             df_nps_valid = df_filtrado[df_filtrado['Estado_NPS'] != 'Sin Dato']
             
             fig_pie_global = px.pie(
-                df_nps_valid, names='Estado_NPS',
-                title='Distribución General de NPS',
-                color='Estado_NPS',
-                color_discrete_map={'Promotor': '#2ecc71', 'Neutro': '#f1c40f', 'Detractor': '#e74c3c'},
-                hole=0.4
+                df_nps_valid, names='Estado_NPS', title='Distribución General de NPS',
+                color='Estado_NPS', color_discrete_map={'Promotor': '#2ecc71', 'Neutro': '#f1c40f', 'Detractor': '#e74c3c'}, hole=0.4
             )
             fig_pie_global.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(color='white'))
             pie_col1.plotly_chart(fig_pie_global, use_container_width=True)
             
             fig_pie_sucursal = px.sunburst(
-                df_nps_valid, path=[col_sucursal, 'Estado_NPS'],
-                title='Distribución de NPS por Sucursal',
-                color='Estado_NPS',
-                color_discrete_map={'Promotor': '#2ecc71', 'Neutro': '#f1c40f', 'Detractor': '#e74c3c'}
+                df_nps_valid, path=[col_sucursal, 'Estado_NPS'], title='Distribución de NPS por Sucursal',
+                color='Estado_NPS', color_discrete_map={'Promotor': '#2ecc71', 'Neutro': '#f1c40f', 'Detractor': '#e74c3c'}
             )
             fig_pie_sucursal.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(color='white'))
             pie_col2.plotly_chart(fig_pie_sucursal, use_container_width=True)
             
             st.write("#### 📋 Registro Detallado de Clientes")
-            
             columnas_tabla = [col_cliente, 'Comentario_Cliente', col_sucursal, col_vendedor, 'Mes_Período', 'Estado_NPS', col_nps]
             df_tabla_nps = df_nps_valid[columnas_tabla].copy()
-            
             df_tabla_nps['Orden_Gravedad'] = df_tabla_nps['Estado_NPS'].map({'Detractor': 1, 'Neutro': 2, 'Promotor': 3})
             df_tabla_nps = df_tabla_nps.sort_values(by=['Orden_Gravedad', 'Mes_Período']).drop(columns=['Orden_Gravedad'])
-            
             df_tabla_nps = df_tabla_nps.rename(columns={
-                col_cliente: 'Nombre del Cliente',
-                'Comentario_Cliente': 'Comentario del Cliente',
-                col_sucursal: 'Sucursal',
-                col_vendedor: 'Vendedor',
-                'Mes_Período': 'Mes',
-                'Estado_NPS': 'Clasificación',
-                col_nps: 'Nota NPS'
+                col_cliente: 'Nombre del Cliente', 'Comentario_Cliente': 'Comentario del Cliente',
+                col_sucursal: 'Sucursal', col_vendedor: 'Vendedor', 'Mes_Período': 'Mes',
+                'Estado_NPS': 'Clasificación', col_nps: 'Nota NPS'
             })
             
             def color_clasificacion(val):
@@ -289,11 +287,7 @@ if not df_ventas_raw.empty:
                 elif val == 'Neutro': return 'color: #f1c40f; font-weight: bold;'
                 return ''
                 
-            st.dataframe(
-                df_tabla_nps.style.map(color_clasificacion, subset=['Clasificación']), 
-                use_container_width=True, 
-                hide_index=True
-            )
+            st.dataframe(df_tabla_nps.style.map(color_clasificacion, subset=['Clasificación']), use_container_width=True, hide_index=True)
 
     # --- PESTAÑA 2: RANKING 0KM ---
     with tab_ranking:
@@ -363,15 +357,12 @@ if not df_ventas_raw.empty:
         
         if not df_usados_raw.empty:
             columnas_u = df_usados_raw.columns.tolist()
-            
             col_nps_u = columnas_u[-1]
             col_ssi_u = next((c for c in columnas_u if 'ssi' in c.lower()), columnas_u[0])
             col_fecha_u = "Mes" if "Mes" in columnas_u else columnas_u[2]
             top_5_cols = columnas_u[5:10] if len(columnas_u) >= 10 else []
-            
             col_cliente_u = next((c for c in columnas_u if 'cliente' in c.lower() or 'nombre' in c.lower() or 'razon' in c.lower()), columnas_u[0])
             col_comentario_uct = columnas_u[15] if len(columnas_u) > 15 else columnas_u[-1]
-            
             col_vendedor_u = next((c for c in columnas_u if 'vendedor' in c.lower() or 'asesor' in c.lower()), columnas_u[0])
             col_sucursal_u = next((c for c in columnas_u if 'boca' in c.lower() or 'sucursal' in c.lower() or 'concesionario' in c.lower()), columnas_u[0])
             
@@ -380,11 +371,9 @@ if not df_ventas_raw.empty:
             
             st.write("#### 🔍 Filtros de Período y Sucursal (UCT)")
             filtro_u1, filtro_u2 = st.columns(2)
-            
             with filtro_u1:
                 meses_disp_u = [m for m in df_u_proc['Mes_Filtro'].unique() if m.lower() != 'nan']
                 mes_sel_u = st.multiselect("Seleccionar Meses (USADO26):", meses_disp_u, default=meses_disp_u)
-            
             with filtro_u2:
                 bocas_disp_u = sorted(df_u_proc[col_sucursal_u].dropna().astype(str).unique().tolist())
                 boca_sel_u = st.multiselect("Seleccionar Sucursal (USADO26):", bocas_disp_u, default=bocas_disp_u)
@@ -394,7 +383,6 @@ if not df_ventas_raw.empty:
             if boca_sel_u: df_u_filt = df_u_filt[df_u_filt[col_sucursal_u].astype(str).isin(boca_sel_u)]
             
             df_u_filt['SSI_Num'] = pd.to_numeric(df_u_filt[col_ssi_u].astype(str).str.replace(',', '.').str.replace('%', ''), errors='coerce')
-                
             for c in top_5_cols:
                 df_u_filt[c] = pd.to_numeric(df_u_filt[c].astype(str).str.replace(',', '.').str.replace('%', ''), errors='coerce')
                 
@@ -413,32 +401,23 @@ if not df_ventas_raw.empty:
             with cu2: st.plotly_chart(crear_reloj(nps_uct_actual, "NPS UCT (Objetivo: 89%)", OBJ_NPS_UCT, 100), use_container_width=True)
             
             st.write("#### 📊 Evolución de los 5 Principales Indicadores")
-            
             if top_5_cols:
                 df_u_mensual = df_u_filt.groupby('Mes_Filtro', sort=False)
                 res_u = []
                 for mes, grupo in df_u_mensual:
-                    fila = {
-                        'Mes': mes,
-                        'Q encuestas': len(grupo),
-                        'SSI UCT': grupo['SSI_Num'].mean(),
-                        'NPS UCT': calcular_nps(grupo[col_nps_u])
-                    }
+                    fila = {'Mes': mes, 'Q encuestas': len(grupo), 'SSI UCT': grupo['SSI_Num'].mean(), 'NPS UCT': calcular_nps(grupo[col_nps_u])}
                     for c in top_5_cols: fila[c] = grupo[c].mean()
                     res_u.append(fila)
                     
                 if res_u:
                     df_res_u = pd.DataFrame(res_u)
-                    
                     fig_evo_u = go.Figure()
-                    
                     fig_evo_u.add_trace(go.Bar(
                         x=df_res_u['Mes'], y=df_res_u['Q encuestas'], 
                         name='Cant. Encuestas', marker_color='rgba(169, 169, 169, 0.3)', 
                         yaxis='y2', text=df_res_u['Q encuestas'].apply(lambda x: f"<b>{x}</b>"), textposition='auto',
                         textfont=dict(color='white', size=12)
                     ))
-                    
                     fig_evo_u.add_trace(go.Scatter(
                         x=df_res_u['Mes'], y=df_res_u['SSI UCT'], 
                         mode='lines+markers+text', name='SSI UCT', line=dict(color='#3498db', width=3), 
@@ -483,44 +462,31 @@ if not df_ventas_raw.empty:
                     st.write("### 💬 Distribución y Detalle de NPS (UCT)")
                     
                     pie_u1, pie_u2 = st.columns(2)
-                    
                     df_nps_valid_u = df_u_filt[df_u_filt['Estado_NPS'] != 'Sin Dato']
                     
                     fig_pie_global_u = px.pie(
-                        df_nps_valid_u, names='Estado_NPS',
-                        title='Distribución General de NPS (UCT)',
-                        color='Estado_NPS',
-                        color_discrete_map={'Promotor': '#2ecc71', 'Neutro': '#f1c40f', 'Detractor': '#e74c3c'},
-                        hole=0.4
+                        df_nps_valid_u, names='Estado_NPS', title='Distribución General de NPS (UCT)',
+                        color='Estado_NPS', color_discrete_map={'Promotor': '#2ecc71', 'Neutro': '#f1c40f', 'Detractor': '#e74c3c'}, hole=0.4
                     )
                     fig_pie_global_u.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(color='white'))
                     pie_u1.plotly_chart(fig_pie_global_u, use_container_width=True)
                     
                     fig_pie_sucursal_u = px.sunburst(
-                        df_nps_valid_u, path=[col_sucursal_u, 'Estado_NPS'],
-                        title='Distribución de NPS por Sucursal (UCT)',
-                        color='Estado_NPS',
-                        color_discrete_map={'Promotor': '#2ecc71', 'Neutro': '#f1c40f', 'Detractor': '#e74c3c'}
+                        df_nps_valid_u, path=[col_sucursal_u, 'Estado_NPS'], title='Distribución de NPS por Sucursal (UCT)',
+                        color='Estado_NPS', color_discrete_map={'Promotor': '#2ecc71', 'Neutro': '#f1c40f', 'Detractor': '#e74c3c'}
                     )
                     fig_pie_sucursal_u.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(color='white'))
                     pie_u2.plotly_chart(fig_pie_sucursal_u, use_container_width=True)
                     
                     st.write("#### 📋 Registro Detallado de Clientes")
-                    
                     columnas_tabla_u = [col_cliente_u, 'Comentario_Cliente', col_sucursal_u, col_vendedor_u, 'Mes_Filtro', 'Estado_NPS', col_nps_u]
                     df_tabla_nps_u = df_nps_valid_u[columnas_tabla_u].copy()
-                    
                     df_tabla_nps_u['Orden_Gravedad'] = df_tabla_nps_u['Estado_NPS'].map({'Detractor': 1, 'Neutro': 2, 'Promotor': 3})
                     df_tabla_nps_u = df_tabla_nps_u.sort_values(by=['Orden_Gravedad', 'Mes_Filtro']).drop(columns=['Orden_Gravedad'])
-                    
                     df_tabla_nps_u = df_tabla_nps_u.rename(columns={
-                        col_cliente_u: 'Nombre del Cliente',
-                        'Comentario_Cliente': 'Comentario del Cliente',
-                        col_sucursal_u: 'Sucursal',
-                        col_vendedor_u: 'Vendedor',
-                        'Mes_Filtro': 'Mes',
-                        'Estado_NPS': 'Clasificación',
-                        col_nps_u: 'Nota NPS'
+                        col_cliente_u: 'Nombre del Cliente', 'Comentario_Cliente': 'Comentario del Cliente',
+                        col_sucursal_u: 'Sucursal', col_vendedor_u: 'Vendedor', 'Mes_Filtro': 'Mes',
+                        'Estado_NPS': 'Clasificación', col_nps_u: 'Nota NPS'
                     })
                     
                     def color_clasificacion_u(val):
@@ -529,11 +495,7 @@ if not df_ventas_raw.empty:
                         elif val == 'Neutro': return 'color: #f1c40f; font-weight: bold;'
                         return ''
                         
-                    st.dataframe(
-                        df_tabla_nps_u.style.map(color_clasificacion_u, subset=['Clasificación']), 
-                        use_container_width=True, 
-                        hide_index=True
-                    )
+                    st.dataframe(df_tabla_nps_u.style.map(color_clasificacion_u, subset=['Clasificación']), use_container_width=True, hide_index=True)
 
                 else:
                     st.warning("No hay datos para el período seleccionado.")
@@ -542,7 +504,146 @@ if not df_ventas_raw.empty:
         else:
             st.warning("No se pudo cargar la hoja USADO26. Verifica que la URL o el nombre de la hoja sean correctos.")
 
-    # --- PESTAÑA 5: CRITERIOS DE ASIGNACIÓN DE PUNTAJE ---
+    # --- PESTAÑA 5: PLAN DE AHORRO (TPA) NUEVA ---
+    with tab_tpa:
+        st.write("### 📘 Gestión de Calidad: Toyota Plan de Ahorro (TPA)")
+        st.write("Métricas y evolución de satisfacción exclusiva para TPA.")
+        
+        if not df_tpa_raw.empty:
+            columnas_tpa = df_tpa_raw.columns.tolist()
+            
+            try:
+                col_mes_t = columnas_tpa[7]        # Columna H
+                col_cliente_t = columnas_tpa[9]    # Columna J
+                col_suc_t = columnas_tpa[23]       # Columna X
+                col_vend_t = columnas_tpa[31]      # Columna AF
+                col_coment_t = columnas_tpa[36]    # Columna AK
+                col_estado_t = columnas_tpa[40]    # Columna AO
+            except IndexError:
+                st.error("Las columnas en la hoja de TPA no coinciden con las indicadas. Verifica que la tabla esté completa.")
+                col_mes_t, col_cliente_t, col_suc_t, col_vend_t, col_coment_t, col_estado_t = None, None, None, None, None, None
+
+            if col_mes_t and col_estado_t:
+                df_t_proc = df_tpa_raw.copy()
+                df_t_proc = df_t_proc.dropna(subset=[col_mes_t])
+                df_t_proc['Mes_Filtro'] = df_t_proc[col_mes_t].astype(str).str.strip().str.capitalize()
+                
+                # Normalizar estados
+                df_t_proc['Estado_NPS'] = df_t_proc[col_estado_t].apply(lambda x: str(x).strip().capitalize() if pd.notna(x) else 'Sin dato')
+                df_t_proc['Estado_NPS'] = df_t_proc['Estado_NPS'].replace({'Promotores': 'Promotor', 'Detractores': 'Detractor', 'Neutros': 'Neutro'})
+                
+                st.write("#### 🔍 Filtros de Período y Sucursal (TPA)")
+                filtro_t1, filtro_t2 = st.columns(2)
+                with filtro_t1:
+                    meses_disp_t = [m for m in df_t_proc['Mes_Filtro'].unique() if m.lower() != 'nan']
+                    mes_sel_t = st.multiselect("Seleccionar Meses (TPA):", meses_disp_t, default=meses_disp_t)
+                with filtro_t2:
+                    bocas_disp_t = sorted(df_t_proc[col_suc_t].dropna().astype(str).unique().tolist())
+                    boca_sel_t = st.multiselect("Seleccionar Sucursal (TPA):", bocas_disp_t, default=bocas_disp_t)
+                
+                df_t_filt = df_t_proc.copy()
+                if mes_sel_t: df_t_filt = df_t_filt[df_t_filt['Mes_Filtro'].isin(mes_sel_t)]
+                if boca_sel_t: df_t_filt = df_t_filt[df_t_filt[col_suc_t].astype(str).isin(boca_sel_t)]
+                
+                df_t_filt['Comentario_Cliente'] = df_t_filt[col_coment_t].fillna("Sin comentarios")
+                
+                OBJETIVO_NPS_TPA = 85.0
+                nps_tpa_actual = calcular_nps_texto(df_t_filt['Estado_NPS'])
+                
+                st.write("#### ⏱️ Estado Actual vs Objetivo TPA")
+                ct1, ct2 = st.columns(2)
+                with ct1: st.plotly_chart(crear_reloj(nps_tpa_actual, "NPS Transaccional TPA (Objetivo: 85%)", OBJETIVO_NPS_TPA, 100), use_container_width=True)
+                with ct2:
+                    st.markdown(f'''
+                        <div style="background-color:#F8FAFC; padding:15px; border-radius:8px; border-left:5px solid #3498db; box-shadow:0 1px 3px rgba(0,0,0,0.05); text-align:center; height:100%; display:flex; flex-direction:column; justify-content:center;">
+                            <span style="color:#555; font-size:16px; font-weight:bold;">TOTAL DE ENCUESTAS (TPA)</span><br>
+                            <span style="font-size:48px; font-weight:bold; color:#1E3A8A;">{len(df_t_filt)}</span>
+                        </div>
+                    ''', unsafe_allow_html=True)
+                
+                st.write("#### 📊 Evolución del NPS (TPA)")
+                df_t_mensual = df_t_filt.groupby('Mes_Filtro', sort=False)
+                res_t = []
+                for mes, grupo in df_t_mensual:
+                    res_t.append({
+                        'Mes': mes,
+                        'Q encuestas': len(grupo),
+                        'NPS TPA': calcular_nps_texto(grupo['Estado_NPS'])
+                    })
+                
+                if res_t:
+                    df_res_t = pd.DataFrame(res_t)
+                    
+                    fig_evo_t = go.Figure()
+                    fig_evo_t.add_trace(go.Bar(
+                        x=df_res_t['Mes'], y=df_res_t['Q encuestas'], 
+                        name='Cant. Encuestas', marker_color='rgba(169, 169, 169, 0.3)', 
+                        yaxis='y2', text=df_res_t['Q encuestas'].apply(lambda x: f"<b>{x}</b>"), textposition='auto',
+                        textfont=dict(color='white', size=12)
+                    ))
+                    fig_evo_t.add_trace(go.Scatter(
+                        x=df_res_t['Mes'], y=df_res_t['NPS TPA'], 
+                        mode='lines+markers+text', name='NPS TPA', line=dict(color='#2ecc71', width=3), 
+                        text=df_res_t['NPS TPA'].apply(lambda x: f"<b>{x:.1f}%</b>" if pd.notna(x) else ""), textposition='bottom center',
+                        textfont=dict(color='white', size=12)
+                    ))
+                    
+                    y2_max_t = max(10, df_res_t['Q encuestas'].max() * 1.5)
+                    y2_min_t = - (100 / 110) * y2_max_t
+
+                    fig_evo_t.update_layout(
+                        title="Evolución de NPS y Volumen de Encuestas (TPA)",
+                        yaxis=dict(title="Porcentaje (%)", range=[-100, 110], zeroline=True, zerolinecolor='rgba(231, 76, 60, 0.5)', zerolinewidth=2),
+                        yaxis2=dict(title="Cantidad de Encuestas", overlaying='y', side='right', range=[y2_min_t, y2_max_t], showgrid=False, zeroline=False),
+                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)"
+                    )
+                    st.plotly_chart(fig_evo_t, use_container_width=True)
+
+                    st.write("---")
+                    st.write("### 💬 Distribución y Detalle de NPS (TPA)")
+                    
+                    pie_t1, pie_t2 = st.columns(2)
+                    df_nps_valid_t = df_t_filt[df_t_filt['Estado_NPS'].isin(['Promotor', 'Neutro', 'Detractor'])]
+                    
+                    fig_pie_global_t = px.pie(
+                        df_nps_valid_t, names='Estado_NPS', title='Distribución General de NPS (TPA)',
+                        color='Estado_NPS', color_discrete_map={'Promotor': '#2ecc71', 'Neutro': '#f1c40f', 'Detractor': '#e74c3c'}, hole=0.4
+                    )
+                    fig_pie_global_t.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(color='white'))
+                    pie_t1.plotly_chart(fig_pie_global_t, use_container_width=True)
+                    
+                    fig_pie_sucursal_t = px.sunburst(
+                        df_nps_valid_t, path=[col_suc_t, 'Estado_NPS'], title='Distribución de NPS por Sucursal (TPA)',
+                        color='Estado_NPS', color_discrete_map={'Promotor': '#2ecc71', 'Neutro': '#f1c40f', 'Detractor': '#e74c3c'}
+                    )
+                    fig_pie_sucursal_t.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(color='white'))
+                    pie_t2.plotly_chart(fig_pie_sucursal_t, use_container_width=True)
+                    
+                    st.write("#### 📋 Registro Detallado de Clientes (TPA)")
+                    columnas_tabla_t = [col_cliente_t, 'Comentario_Cliente', col_suc_t, col_vend_t, 'Mes_Filtro', 'Estado_NPS']
+                    df_tabla_nps_t = df_nps_valid_t[columnas_tabla_t].copy()
+                    df_tabla_nps_t['Orden_Gravedad'] = df_tabla_nps_t['Estado_NPS'].map({'Detractor': 1, 'Neutro': 2, 'Promotor': 3})
+                    df_tabla_nps_t = df_tabla_nps_t.sort_values(by=['Orden_Gravedad', 'Mes_Filtro']).drop(columns=['Orden_Gravedad'])
+                    df_tabla_nps_t = df_tabla_nps_t.rename(columns={
+                        col_cliente_t: 'Nombre del Suscriptor', 'Comentario_Cliente': 'Comentario del Cliente',
+                        col_suc_t: 'Sucursal', col_vend_t: 'Vendedor', 'Mes_Filtro': 'Mes',
+                        'Estado_NPS': 'Clasificación'
+                    })
+                    
+                    def color_clasificacion_t(val):
+                        if val == 'Detractor': return 'color: #e74c3c; font-weight: bold;'
+                        elif val == 'Promotor': return 'color: #2ecc71; font-weight: bold;'
+                        elif val == 'Neutro': return 'color: #f1c40f; font-weight: bold;'
+                        return ''
+                        
+                    st.dataframe(df_tabla_nps_t.style.map(color_clasificacion_t, subset=['Clasificación']), use_container_width=True, hide_index=True)
+                else:
+                    st.warning("No hay datos para el período seleccionado.")
+        else:
+            st.warning("No se pudo cargar la hoja de TPA. Verifica que el enlace sea correcto.")
+
+    # --- PESTAÑA 6: CRITERIOS DE ASIGNACIÓN DE PUNTAJE ---
     with tab_criterios:
         st.write("### 📋 Criterios de Asignación de Puntaje")
         st.write("Resumen de las métricas y porcentajes de alcance para el cálculo de objetivos y comisiones.")
