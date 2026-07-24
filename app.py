@@ -76,7 +76,6 @@ def obtener_estado_nps(val):
         elif 'detractor' in s: return 'Detractor'
         else: return 'Neutro'
 
-# FUNCIÓN CORREGIDA: Solo cuenta matemáticamente los campos válidos
 def calcular_nps_texto(serie_estado):
     s_str = serie_estado.astype(str).str.lower()
     promotores = s_str.str.contains('promotor').sum()
@@ -526,27 +525,34 @@ if not df_ventas_raw.empty:
             df_t_proc = df_t_proc.dropna(subset=[col_mes_t])
             df_t_proc['Mes_Filtro'] = df_t_proc[col_mes_t].astype(str).str.strip().str.capitalize()
             
-            # Normalizar estados
+            # --- ORDENAMIENTO CRONOLÓGICO DE MESES ---
+            meses_orden = {
+                'Enero': 1, 'Febrero': 2, 'Marzo': 3, 'Abril': 4, 'Mayo': 5, 'Junio': 6,
+                'Julio': 7, 'Agosto': 8, 'Septiembre': 9, 'Octubre': 10, 'Noviembre': 11, 'Diciembre': 12
+            }
+            df_t_proc['Mes_Num'] = df_t_proc['Mes_Filtro'].map(meses_orden).fillna(99)
+            df_t_proc = df_t_proc.sort_values('Mes_Num')
+            
             df_t_proc['Estado_NPS'] = df_t_proc[col_estado_t].apply(lambda x: str(x).strip().capitalize() if pd.notna(x) else 'Sin dato')
             df_t_proc['Estado_NPS'] = df_t_proc['Estado_NPS'].replace({'Promotores': 'Promotor', 'Detractores': 'Detractor', 'Neutros': 'Neutro'})
             
             st.write("#### 🔍 Filtros de Período y Sucursal (TPA)")
             filtro_t1, filtro_t2 = st.columns(2)
             with filtro_t1:
+                # Los meses aparecerán ordenados cronológicamente gracias al sort_values anterior
                 meses_disp_t = [m for m in df_t_proc['Mes_Filtro'].unique() if m.lower() != 'nan']
                 mes_sel_t = st.multiselect("Seleccionar Meses (TPA):", meses_disp_t, default=meses_disp_t)
             with filtro_t2:
                 bocas_disp_t = sorted(df_t_proc[col_suc_t].dropna().astype(str).unique().tolist())
                 boca_sel_t = st.multiselect("Seleccionar Sucursal (TPA):", bocas_disp_t, default=bocas_disp_t)
             
-            # 1. Filtro general de la pestaña
             df_t_filt = df_t_proc.copy()
             if mes_sel_t: df_t_filt = df_t_filt[df_t_filt['Mes_Filtro'].isin(mes_sel_t)]
             if boca_sel_t: df_t_filt = df_t_filt[df_t_filt[col_suc_t].astype(str).isin(boca_sel_t)]
             
             df_t_filt['Comentario_Cliente'] = df_t_filt[col_coment_t].fillna("Sin comentarios")
             
-            # 2. FILTRO ESTRICTO PARA CÁLCULOS NPS (Ignora celdas vacías o "Sin dato")
+            # FILTRO ESTRICTO: Solo contamos aquellos que tienen un estado válido
             df_nps_valid_t = df_t_filt[df_t_filt['Estado_NPS'].isin(['Promotor', 'Neutro', 'Detractor'])].copy()
             
             OBJETIVO_NPS_TPA = 85.0
@@ -556,7 +562,6 @@ if not df_ventas_raw.empty:
             ct1, ct2 = st.columns(2)
             with ct1: st.plotly_chart(crear_reloj(nps_tpa_actual, "NPS Transaccional TPA (Objetivo: 85%)", OBJETIVO_NPS_TPA, 100), use_container_width=True)
             with ct2:
-                # El contador ahora muestra SOLO encuestas válidas
                 st.markdown(f'''
                     <div style="background-color:#F8FAFC; padding:15px; border-radius:8px; border-left:5px solid #3498db; box-shadow:0 1px 3px rgba(0,0,0,0.05); text-align:center; height:100%; display:flex; flex-direction:column; justify-content:center;">
                         <span style="color:#555; font-size:16px; font-weight:bold;">TOTAL DE ENCUESTAS VÁLIDAS (TPA)</span><br>
@@ -566,7 +571,7 @@ if not df_ventas_raw.empty:
             
             st.write("#### 📊 Evolución del NPS (TPA)")
             
-            # La evolución se calcula estrictamente sobre el DF válido
+            # Agrupamos sobre la base de datos YA LIMPIA (solo encuestas válidas)
             df_t_mensual = df_nps_valid_t.groupby('Mes_Filtro', sort=False)
             res_t = []
             for mes, grupo in df_t_mensual:
