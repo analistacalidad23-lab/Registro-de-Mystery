@@ -168,7 +168,7 @@ if not df_ventas_raw.empty:
     df_filtrado['Estado_NPS'] = df_filtrado[col_nps].apply(obtener_estado_nps)
     df_filtrado['Comentario_Cliente'] = df_filtrado[col_comentario_0km].fillna("Sin comentarios")
 
-    # 5. Creación de Pestañas (Se suma TPA)
+    # 5. Creación de Pestañas
     tab_convencional, tab_ranking, tab_comisiones, tab_usados, tab_tpa, tab_criterios = st.tabs([
         "📊 Venta Convencional 0km", 
         "🏆 Ranking Vendedores", 
@@ -504,7 +504,7 @@ if not df_ventas_raw.empty:
         else:
             st.warning("No se pudo cargar la hoja USADO26. Verifica que la URL o el nombre de la hoja sean correctos.")
 
-    # --- PESTAÑA 5: PLAN DE AHORRO (TPA) NUEVA ---
+    # --- PESTAÑA 5: PLAN DE AHORRO (TPA) ---
     with tab_tpa:
         st.write("### 📘 Gestión de Calidad: Toyota Plan de Ahorro (TPA)")
         st.write("Métricas y evolución de satisfacción exclusiva para TPA.")
@@ -512,17 +512,14 @@ if not df_ventas_raw.empty:
         if not df_tpa_raw.empty:
             columnas_tpa = df_tpa_raw.columns.tolist()
             
-            try:
-                col_mes_t = columnas_tpa[7]        # Columna H
-                col_cliente_t = columnas_tpa[9]    # Columna J
-                col_suc_t = columnas_tpa[23]       # Columna X
-                col_vend_t = columnas_tpa[31]      # Columna AF
-                col_coment_t = columnas_tpa[36]    # Columna AK
-                col_estado_t = columnas_tpa[40]    # Columna AO
-            except IndexError:
-                st.error("Las columnas en la hoja de TPA no coinciden con las indicadas. Verifica que la tabla esté completa.")
-                col_mes_t, col_cliente_t, col_suc_t, col_vend_t, col_coment_t, col_estado_t = None, None, None, None, None, None
-
+            # --- DETECCIÓN INTELIGENTE (Solución al IndexError) ---
+            col_mes_t = next((c for c in columnas_tpa if 'mes' in c.lower() or 'fecha' in c.lower()), columnas_tpa[7] if len(columnas_tpa) > 7 else columnas_tpa[0])
+            col_cliente_t = next((c for c in columnas_tpa if 'suscriptor' in c.lower() or 'cliente' in c.lower() or 'nombre' in c.lower()), columnas_tpa[9] if len(columnas_tpa) > 9 else columnas_tpa[0])
+            col_suc_t = next((c for c in columnas_tpa if 'sucursal' in c.lower() or 'boca' in c.lower()), columnas_tpa[23] if len(columnas_tpa) > 23 else columnas_tpa[0])
+            col_vend_t = next((c for c in columnas_tpa if 'vendedor' in c.lower() or 'asesor' in c.lower()), columnas_tpa[31] if len(columnas_tpa) > 31 else columnas_tpa[0])
+            col_coment_t = next((c for c in columnas_tpa if 'comentario' in c.lower() or 'observaci' in c.lower()), columnas_tpa[36] if len(columnas_tpa) > 36 else columnas_tpa[0])
+            col_estado_t = next((c for c in columnas_tpa if 'nps' in c.lower() or 'estado' in c.lower() or 'promotor' in c.lower() or 'detractor' in c.lower()), columnas_tpa[40] if len(columnas_tpa) > 40 else columnas_tpa[-1])
+            
             if col_mes_t and col_estado_t:
                 df_t_proc = df_tpa_raw.copy()
                 df_t_proc = df_t_proc.dropna(subset=[col_mes_t])
