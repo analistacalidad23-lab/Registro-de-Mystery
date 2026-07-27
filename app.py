@@ -138,12 +138,10 @@ if not df_ventas_raw.empty:
         df_procesado['Fecha_DT'] = pd.to_datetime(df_procesado[col_fecha], errors='coerce')
         df_procesado['Mes_Nombre'] = df_procesado['Fecha_DT'].dt.strftime('%B').str.lower()
         df_procesado['Mes_Num'] = df_procesado['Fecha_DT'].dt.month
-        df_procesado['Año'] = df_procesado['Fecha_DT'].dt.year.fillna(0).astype(int).astype(str)
         df_procesado['Mes_Período'] = df_procesado['Fecha_DT'].dt.strftime('%Y-%m')
     except:
         df_procesado['Mes_Nombre'] = df_procesado[col_fecha].astype(str)
         df_procesado['Mes_Num'] = 1
-        df_procesado['Año'] = "N/D"
         df_procesado['Mes_Período'] = df_procesado[col_fecha].astype(str)
 
     df_procesado['SSI_Num'] = pd.to_numeric(df_procesado[col_ssi].astype(str).str.replace(',', '.').str.replace('%', ''), errors='coerce')
@@ -154,7 +152,6 @@ if not df_ventas_raw.empty:
     col_atencion_vend = next((c for c in cols_subindices if 'atencion' in c.lower() and 'vendedor' in c.lower()), None)
     if not col_atencion_vend: col_atencion_vend = next((c for c in cols_subindices if '02' in c), None)
 
-    años_disp_0km = sorted([a for a in df_procesado['Año'].unique() if a != "0"], reverse=True)
     meses_disp_0km = sorted(df_procesado['Mes_Período'].dropna().unique().tolist())
     bocas_disp_0km = sorted(df_procesado[col_sucursal].dropna().astype(str).unique().tolist())
 
@@ -198,17 +195,16 @@ if not df_ventas_raw.empty:
         # CONTENEDOR FIJO DE FILTROS (Sticky)
         st.markdown('<div class="sticky-filters">', unsafe_allow_html=True)
         st.write("#### 🔍 Filtros de Visualización (0km)")
-        f_col1, f_col2, f_col3 = st.columns(3)
+        f_col1, f_col2 = st.columns(2)
+        
         with f_col1:
-            año_sel = st.selectbox("Año:", ["Todos"] + años_disp_0km, key="f_ano_0km")
-        with f_col2:
             meses_sel = st.multiselect("Filtrar por Mes (Período):", meses_disp_0km, default=meses_disp_0km, key="f_mes_0km")
-        with f_col3:
+        with f_col2:
             boca_sel = st.selectbox("Seleccionar Sucursal (Boca de Venta):", ["Todas"] + bocas_disp_0km, key="f_boca_0km")
         st.markdown('</div>', unsafe_allow_html=True)
 
+        # Aplicar filtros
         df_filtrado = df_procesado.copy()
-        if año_sel != "Todos": df_filtrado = df_filtrado[df_filtrado['Año'] == año_sel]
         if boca_sel != "Todas": df_filtrado = df_filtrado[df_filtrado[col_sucursal].astype(str) == boca_sel]
         if meses_sel: df_filtrado = df_filtrado[df_filtrado['Mes_Período'].isin(meses_sel)]
 
@@ -226,7 +222,7 @@ if not df_ventas_raw.empty:
         with col2: st.plotly_chart(crear_reloj(nps_actual, "Indicador NPS (Objetivo: 87%)", OBJETIVO_NPS, 100), use_container_width=True)
 
         st.markdown("---")
-        st.write(f"### Desempeño Mensual - Boca de Venta: {boca_sel} | Año: {año_sel}")
+        st.write(f"### Desempeño Mensual - Boca de Venta: {boca_sel}")
         
         df_mensual = df_filtrado.sort_values('Mes_Num').groupby('Mes_Nombre', sort=False) if 'Mes_Num' in df_filtrado.columns else df_filtrado.groupby('Mes_Nombre', sort=False)
         resumen_mensual = []
@@ -328,17 +324,14 @@ if not df_ventas_raw.empty:
     with tab_ranking:
         st.markdown('<div class="sticky-filters">', unsafe_allow_html=True)
         st.write("#### 🔍 Filtros de Ranking (0km)")
-        f_rk1, f_rk2, f_rk3 = st.columns(3)
+        f_rk1, f_rk2 = st.columns(2)
         with f_rk1:
-            año_sel_rk = st.selectbox("Año:", ["Todos"] + años_disp_0km, key="f_ano_rk")
-        with f_rk2:
             meses_sel_rk = st.multiselect("Filtrar por Mes (Período):", meses_disp_0km, default=meses_disp_0km, key="f_mes_rk")
-        with f_rk3:
+        with f_rk2:
             boca_sel_rk = st.selectbox("Seleccionar Sucursal (Boca de Venta):", ["Todas"] + bocas_disp_0km, key="f_boca_rk")
         st.markdown('</div>', unsafe_allow_html=True)
 
         df_filt_rank = df_procesado.copy()
-        if año_sel_rk != "Todos": df_filt_rank = df_filt_rank[df_filt_rank['Año'] == año_sel_rk]
         if boca_sel_rk != "Todas": df_filt_rank = df_filt_rank[df_filt_rank[col_sucursal].astype(str) == boca_sel_rk]
         if meses_sel_rk: df_filt_rank = df_filt_rank[df_filt_rank['Mes_Período'].isin(meses_sel_rk)]
 
