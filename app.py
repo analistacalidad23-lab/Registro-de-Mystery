@@ -22,10 +22,11 @@ st.markdown("""
         position: sticky;
         top: 0px;
         z-index: 999;
-        background-color: #0e1117; /* Color de fondo nativo de Streamlit Dark Mode */
+        background-color: #0e1117; /* Fondo adaptado a modo oscuro */
         padding: 15px 10px;
         border-bottom: 1px solid #262730;
         margin-bottom: 20px;
+        border-radius: 5px;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -121,8 +122,8 @@ df_tpa_raw = cargar_datos(URL_TPA)
 if not df_ventas_raw.empty:
     columnas_disponibles = df_ventas_raw.columns.tolist()
     
-    # Configuración estática 0km
-    col_nps = columnas_disponibles[-1]
+    # --- CONFIGURACIÓN ESTÁTICA 0KM (VENTAS26) ---
+    col_nps = columnas_disponibles[-1] 
     col_vendedor = "Asesor de Venta"
     col_ssi = "SSI"
     col_fecha = "Fecha de encuesta"
@@ -152,6 +153,10 @@ if not df_ventas_raw.empty:
 
     col_atencion_vend = next((c for c in cols_subindices if 'atencion' in c.lower() and 'vendedor' in c.lower()), None)
     if not col_atencion_vend: col_atencion_vend = next((c for c in cols_subindices if '02' in c), None)
+
+    años_disp_0km = sorted([a for a in df_procesado['Año'].unique() if a != "0"], reverse=True)
+    meses_disp_0km = sorted(df_procesado['Mes_Período'].dropna().unique().tolist())
+    bocas_disp_0km = sorted(df_procesado[col_sucursal].dropna().astype(str).unique().tolist())
 
     # ---------------------------------------------------------
     # PROCESAMIENTO GLOBAL DE TPA
@@ -194,19 +199,14 @@ if not df_ventas_raw.empty:
         st.markdown('<div class="sticky-filters">', unsafe_allow_html=True)
         st.write("#### 🔍 Filtros de Visualización (0km)")
         f_col1, f_col2, f_col3 = st.columns(3)
-        
         with f_col1:
-            años_disp = sorted([a for a in df_procesado['Año'].unique() if a != "0"], reverse=True)
-            año_sel = st.selectbox("Año:", ["Todos"] + años_disp, key="f_ano_0km")
+            año_sel = st.selectbox("Año:", ["Todos"] + años_disp_0km, key="f_ano_0km")
         with f_col2:
-            meses_disp = sorted(df_procesado['Mes_Período'].dropna().unique().tolist())
-            meses_sel = st.multiselect("Filtrar por Mes (Período):", meses_disp, default=meses_disp, key="f_mes_0km")
+            meses_sel = st.multiselect("Filtrar por Mes (Período):", meses_disp_0km, default=meses_disp_0km, key="f_mes_0km")
         with f_col3:
-            bocas_disp = sorted(df_procesado[col_sucursal].dropna().astype(str).unique().tolist())
-            boca_sel = st.selectbox("Seleccionar Sucursal (Boca de Venta):", ["Todas"] + bocas_disp, key="f_boca_0km")
+            boca_sel = st.selectbox("Seleccionar Sucursal (Boca de Venta):", ["Todas"] + bocas_disp_0km, key="f_boca_0km")
         st.markdown('</div>', unsafe_allow_html=True)
 
-        # Aplicar filtros
         df_filtrado = df_procesado.copy()
         if año_sel != "Todos": df_filtrado = df_filtrado[df_filtrado['Año'] == año_sel]
         if boca_sel != "Todas": df_filtrado = df_filtrado[df_filtrado[col_sucursal].astype(str) == boca_sel]
@@ -326,9 +326,25 @@ if not df_ventas_raw.empty:
 
     # --- PESTAÑA 2: RANKING 0KM ---
     with tab_ranking:
+        st.markdown('<div class="sticky-filters">', unsafe_allow_html=True)
+        st.write("#### 🔍 Filtros de Ranking (0km)")
+        f_rk1, f_rk2, f_rk3 = st.columns(3)
+        with f_rk1:
+            año_sel_rk = st.selectbox("Año:", ["Todos"] + años_disp_0km, key="f_ano_rk")
+        with f_rk2:
+            meses_sel_rk = st.multiselect("Filtrar por Mes (Período):", meses_disp_0km, default=meses_disp_0km, key="f_mes_rk")
+        with f_rk3:
+            boca_sel_rk = st.selectbox("Seleccionar Sucursal (Boca de Venta):", ["Todas"] + bocas_disp_0km, key="f_boca_rk")
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        df_filt_rank = df_procesado.copy()
+        if año_sel_rk != "Todos": df_filt_rank = df_filt_rank[df_filt_rank['Año'] == año_sel_rk]
+        if boca_sel_rk != "Todas": df_filt_rank = df_filt_rank[df_filt_rank[col_sucursal].astype(str) == boca_sel_rk]
+        if meses_sel_rk: df_filt_rank = df_filt_rank[df_filt_rank['Mes_Período'].isin(meses_sel_rk)]
+
         st.write("### Ranking de Vendedores y Volumen de Encuestas")
         resumen = []
-        for vend, grupo in df_filtrado.groupby(col_vendedor):
+        for vend, grupo in df_filt_rank.groupby(col_vendedor):
             resumen.append({'Vendedor': vend, 'Encuestas': len(grupo), 'SSI_Promedio': grupo['SSI_Num'].mean(), 'NPS': calcular_nps(grupo[col_nps])})
             
         df_resumen = pd.DataFrame(resumen).sort_values('SSI_Promedio', ascending=False).dropna(subset=['SSI_Promedio'])
@@ -361,11 +377,26 @@ if not df_ventas_raw.empty:
 
     # --- PESTAÑA 3: COMISIONES (0KM Y TPA) ---
     with tab_comisiones:
+        st.markdown('<div class="sticky-filters">', unsafe_allow_html=True)
+        st.write("#### 🔍 Filtros de Liquidación (Comisiones)")
+        f_com1, f_com2 = st.columns(2)
+        with f_com1:
+            meses_sel_com_0km = st.multiselect("Seleccionar Meses (Comisión 0km):", meses_disp_0km, default=meses_disp_0km, key="f_mes_com_0km")
+        with f_com2:
+            if df_t_proc is not None:
+                meses_disp_tpa_com = [m for m in df_t_proc['Mes_Filtro'].unique() if m.lower() != 'nan']
+                mes_sel_tpa_com = st.multiselect("Seleccionar Meses (Comisión TPA):", meses_disp_tpa_com, default=meses_disp_tpa_com, key="f_mes_com_tpa")
+        st.markdown('</div>', unsafe_allow_html=True)
+
         st.write("### 💰 Tabla de Cálculo de Comisiones SSI (0km)")
         if not col_atencion_vend: st.error("No se detectó la columna '02 Atencion Vendedor' en los datos.")
         else:
+            df_com_0km_filt = df_procesado.copy()
+            if meses_sel_com_0km:
+                df_com_0km_filt = df_com_0km_filt[df_com_0km_filt['Mes_Período'].isin(meses_sel_com_0km)]
+
             datos_comision = []
-            for vend, grupo in df_filtrado.groupby(col_vendedor):
+            for vend, grupo in df_com_0km_filt.groupby(col_vendedor):
                 cant_encuestas, ssi_promedio, atencion_promedio = len(grupo), grupo['SSI_Num'].mean(), grupo[col_atencion_vend].mean()
                 if pd.isna(atencion_promedio) or cant_encuestas == 0: comision = 0.00
                 elif atencion_promedio*10 < 95.5: comision = -0.05
@@ -383,16 +414,12 @@ if not df_ventas_raw.empty:
                     .map(lambda val: 'color: #e74c3c; font-weight: bold;' if val == -0.05 else ('color: #2ecc71; font-weight: bold;' if val == 0.01 else 'color: #7f8c8d;'), subset=['Comisión SSI']),
                     use_container_width=True, hide_index=True
                 )
-            else: st.warning("Datos insuficientes para el cálculo de comisiones.")
+            else: st.warning("Datos insuficientes para el cálculo de comisiones de 0km en el período seleccionado.")
 
         st.markdown("---")
         st.write("### 💰 Tabla de Cálculo de Comisiones NPS (Toyota Plan de Ahorro)")
         
         if df_t_proc is not None:
-            st.write("#### 🔍 Filtro de Período (Comisiones TPA)")
-            meses_disp_tpa_com = [m for m in df_t_proc['Mes_Filtro'].unique() if m.lower() != 'nan']
-            mes_sel_tpa_com = st.multiselect("Seleccionar Meses (TPA):", meses_disp_tpa_com, default=meses_disp_tpa_com, key="filtro_mes_tpa_com")
-            
             df_tpa_comision = df_t_proc.copy()
             if mes_sel_tpa_com:
                 df_tpa_comision = df_tpa_comision[df_tpa_comision['Mes_Filtro'].isin(mes_sel_tpa_com)]
@@ -435,7 +462,6 @@ if not df_ventas_raw.empty:
 
     # --- PESTAÑA 4: USADOS CERTIFICADOS (UCT) ---
     with tab_usados:
-        # CONTENEDOR FIJO DE FILTROS (Sticky)
         st.markdown('<div class="sticky-filters">', unsafe_allow_html=True)
         st.write("#### 🔍 Filtros de Período y Sucursal (UCT)")
         filtro_u1, filtro_u2 = st.columns(2)
@@ -448,6 +474,9 @@ if not df_ventas_raw.empty:
             boca_sel_u = st.multiselect("Seleccionar Sucursal (USADO26):", bocas_disp_u, default=bocas_disp_u, key="f_boca_uct")
         st.markdown('</div>', unsafe_allow_html=True)
 
+        st.write("### 🚗 Gestión de Calidad: Toyota Usados Certificados (UCT)")
+        st.write("Métricas exclusivas y evolución de satisfacción para el canal de Usados.")
+        
         if not df_usados_raw.empty:
             columnas_u = df_usados_raw.columns.tolist()
             col_nps_u = columnas_u[-1]
@@ -590,18 +619,20 @@ if not df_ventas_raw.empty:
 
     # --- PESTAÑA 5: PLAN DE AHORRO (TPA) ---
     with tab_tpa:
-        # CONTENEDOR FIJO DE FILTROS (Sticky)
         st.markdown('<div class="sticky-filters">', unsafe_allow_html=True)
         st.write("#### 🔍 Filtros de Período y Sucursal (TPA)")
         filtro_t1, filtro_t2 = st.columns(2)
         with filtro_t1:
-            meses_disp_t = [m for m in df_t_proc['Mes_Filtro'].unique() if m.lower() != 'nan']
+            meses_disp_t = [m for m in df_t_proc['Mes_Filtro'].unique() if m.lower() != 'nan'] if df_t_proc is not None else []
             mes_sel_t = st.multiselect("Seleccionar Meses (TPA):", meses_disp_t, default=meses_disp_t, key="f_mes_tpa")
         with filtro_t2:
-            bocas_disp_t = sorted(df_t_proc[col_suc_t].dropna().astype(str).unique().tolist())
+            bocas_disp_t = sorted(df_t_proc[col_suc_t].dropna().astype(str).unique().tolist()) if df_t_proc is not None else []
             boca_sel_t = st.multiselect("Seleccionar Sucursal (TPA):", bocas_disp_t, default=bocas_disp_t, key="f_boca_tpa")
         st.markdown('</div>', unsafe_allow_html=True)
 
+        st.write("### 📘 Gestión de Calidad: Toyota Plan de Ahorro (TPA)")
+        st.write("Métricas y evolución de satisfacción exclusiva para TPA.")
+        
         if df_t_proc is not None:
             df_t_filt = df_t_proc.copy()
             if mes_sel_t: df_t_filt = df_t_filt[df_t_filt['Mes_Filtro'].isin(mes_sel_t)]
