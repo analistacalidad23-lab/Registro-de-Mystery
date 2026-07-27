@@ -16,6 +16,17 @@ st.markdown("""
     <style>
     .main-title { font-size: 28px; font-weight: bold; color: #3498db; margin-bottom: 5px; }
     .subtitle { font-size: 14px; color: #a0a0a0; margin-bottom: 25px; }
+    
+    /* Estilo para fijar los filtros en la parte superior al hacer scroll */
+    .sticky-filters {
+        position: sticky;
+        top: 0px;
+        z-index: 999;
+        background-color: #0e1117; /* Color de fondo nativo de Streamlit Dark Mode */
+        padding: 15px 10px;
+        border-bottom: 1px solid #262730;
+        margin-bottom: 20px;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -110,21 +121,12 @@ df_tpa_raw = cargar_datos(URL_TPA)
 if not df_ventas_raw.empty:
     columnas_disponibles = df_ventas_raw.columns.tolist()
     
-    # Configuración 0km (VENTAS26)
-    st.sidebar.header("⚙️ Configuración 0km (VENTAS26)")
-    
+    # Configuración estática 0km
     col_nps = columnas_disponibles[-1]
-    col_vend_detectada = next((c for c in columnas_disponibles if 'vendedor' in c.lower() or 'asesor' in c.lower()), columnas_disponibles[0])
-    col_vendedor = st.sidebar.selectbox("Columna Vendedor:", columnas_disponibles, index=columnas_disponibles.index(col_vend_detectada))
-    
-    col_ssi_detectada = next((c for c in columnas_disponibles if 'ssi' in c.lower()), columnas_disponibles[0])
-    col_ssi = st.sidebar.selectbox("Columna SSI:", columnas_disponibles, index=columnas_disponibles.index(col_ssi_detectada))
-    
-    col_fecha_detectada = next((c for c in columnas_disponibles if 'fecha' in c.lower() or 'mes' in c.lower() or 'periodo' in c.lower()), columnas_disponibles[0])
-    col_fecha = st.sidebar.selectbox("Columna Fecha:", columnas_disponibles, index=columnas_disponibles.index(col_fecha_detectada))
-
-    col_sucursal_detectada = next((c for c in columnas_disponibles if 'boca' in c.lower() or 'sucursal' in c.lower() or 'concesionario' in c.lower()), columnas_disponibles[0])
-    col_sucursal = st.sidebar.selectbox("Columna Boca de Venta:", columnas_disponibles, index=columnas_disponibles.index(col_sucursal_detectada))
+    col_vendedor = "Asesor de Venta"
+    col_ssi = "SSI"
+    col_fecha = "Fecha de encuesta"
+    col_sucursal = "Boca de Venta"
 
     col_cliente = next((c for c in columnas_disponibles if 'cliente' in c.lower() or 'nombre' in c.lower() or 'razon' in c.lower()), columnas_disponibles[0])
     col_comentario_0km = columnas_disponibles[30] if len(columnas_disponibles) > 30 else columnas_disponibles[-1]
@@ -151,27 +153,8 @@ if not df_ventas_raw.empty:
     col_atencion_vend = next((c for c in cols_subindices if 'atencion' in c.lower() and 'vendedor' in c.lower()), None)
     if not col_atencion_vend: col_atencion_vend = next((c for c in cols_subindices if '02' in c), None)
 
-    # Filtros Globales en Barra Lateral (0km)
-    st.sidebar.header("🔍 Filtros Generales 0km")
-    años_disp = sorted([a for a in df_procesado['Año'].unique() if a != "0"], reverse=True)
-    año_sel = st.sidebar.selectbox("Año:", ["Todos"] + años_disp)
-    
-    meses_disp = sorted(df_procesado['Mes_Período'].dropna().unique().tolist())
-    meses_sel = st.sidebar.multiselect("Filtrar por Mes (Período):", meses_disp, default=meses_disp)
-
-    bocas_disp = sorted(df_procesado[col_sucursal].dropna().astype(str).unique().tolist())
-    boca_sel = st.sidebar.selectbox("Seleccionar Boca de Venta:", ["Todas"] + bocas_disp)
-
-    df_filtrado = df_procesado.copy()
-    if año_sel != "Todos": df_filtrado = df_filtrado[df_filtrado['Año'] == año_sel]
-    if boca_sel != "Todas": df_filtrado = df_filtrado[df_filtrado[col_sucursal].astype(str) == boca_sel]
-    if meses_sel: df_filtrado = df_filtrado[df_filtrado['Mes_Período'].isin(meses_sel)]
-
-    df_filtrado['Estado_NPS'] = df_filtrado[col_nps].apply(obtener_estado_nps)
-    df_filtrado['Comentario_Cliente'] = df_filtrado[col_comentario_0km].fillna("Sin comentarios")
-
     # ---------------------------------------------------------
-    # PROCESAMIENTO GLOBAL DE TPA (Para Comisiones y Pestaña TPA)
+    # PROCESAMIENTO GLOBAL DE TPA
     # ---------------------------------------------------------
     df_t_proc = None
     if not df_tpa_raw.empty:
@@ -207,6 +190,31 @@ if not df_ventas_raw.empty:
 
     # --- PESTAÑA 1: VENTA CONVENCIONAL 0KM ---
     with tab_convencional:
+        # CONTENEDOR FIJO DE FILTROS (Sticky)
+        st.markdown('<div class="sticky-filters">', unsafe_allow_html=True)
+        st.write("#### 🔍 Filtros de Visualización (0km)")
+        f_col1, f_col2, f_col3 = st.columns(3)
+        
+        with f_col1:
+            años_disp = sorted([a for a in df_procesado['Año'].unique() if a != "0"], reverse=True)
+            año_sel = st.selectbox("Año:", ["Todos"] + años_disp, key="f_ano_0km")
+        with f_col2:
+            meses_disp = sorted(df_procesado['Mes_Período'].dropna().unique().tolist())
+            meses_sel = st.multiselect("Filtrar por Mes (Período):", meses_disp, default=meses_disp, key="f_mes_0km")
+        with f_col3:
+            bocas_disp = sorted(df_procesado[col_sucursal].dropna().astype(str).unique().tolist())
+            boca_sel = st.selectbox("Seleccionar Sucursal (Boca de Venta):", ["Todas"] + bocas_disp, key="f_boca_0km")
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        # Aplicar filtros
+        df_filtrado = df_procesado.copy()
+        if año_sel != "Todos": df_filtrado = df_filtrado[df_filtrado['Año'] == año_sel]
+        if boca_sel != "Todas": df_filtrado = df_filtrado[df_filtrado[col_sucursal].astype(str) == boca_sel]
+        if meses_sel: df_filtrado = df_filtrado[df_filtrado['Mes_Período'].isin(meses_sel)]
+
+        df_filtrado['Estado_NPS'] = df_filtrado[col_nps].apply(obtener_estado_nps)
+        df_filtrado['Comentario_Cliente'] = df_filtrado[col_comentario_0km].fillna("Sin comentarios")
+
         st.write("### Estado Actual vs Objetivos (0km)")
         OBJETIVO_SSI = 95.6
         OBJETIVO_NPS = 87.0
@@ -389,7 +397,6 @@ if not df_ventas_raw.empty:
             if mes_sel_tpa_com:
                 df_tpa_comision = df_tpa_comision[df_tpa_comision['Mes_Filtro'].isin(mes_sel_tpa_com)]
                 
-            # Filtro estricto: Solo contamos promotores, neutros y detractores para la comisión
             df_nps_valid_com = df_tpa_comision[df_tpa_comision['Estado_NPS'].isin(['Promotor', 'Neutro', 'Detractor'])]
             
             datos_comision_tpa = []
@@ -428,9 +435,19 @@ if not df_ventas_raw.empty:
 
     # --- PESTAÑA 4: USADOS CERTIFICADOS (UCT) ---
     with tab_usados:
-        st.write("### 🚗 Gestión de Calidad: Toyota Usados Certificados (UCT)")
-        st.write("Métricas exclusivas y evolución de satisfacción para el canal de Usados.")
-        
+        # CONTENEDOR FIJO DE FILTROS (Sticky)
+        st.markdown('<div class="sticky-filters">', unsafe_allow_html=True)
+        st.write("#### 🔍 Filtros de Período y Sucursal (UCT)")
+        filtro_u1, filtro_u2 = st.columns(2)
+        with filtro_u1:
+            meses_disp_u = [m for m in df_usados_raw["Mes" if "Mes" in df_usados_raw.columns else df_usados_raw.columns[2]].astype(str).str.strip().str.capitalize().unique() if m.lower() != 'nan']
+            mes_sel_u = st.multiselect("Seleccionar Meses (USADO26):", meses_disp_u, default=meses_disp_u, key="f_mes_uct")
+        with filtro_u2:
+            col_suc_uct_name = next((c for c in df_usados_raw.columns.tolist() if 'boca' in c.lower() or 'sucursal' in c.lower() or 'concesionario' in c.lower()), df_usados_raw.columns[0])
+            bocas_disp_u = sorted(df_usados_raw[col_suc_uct_name].dropna().astype(str).unique().tolist())
+            boca_sel_u = st.multiselect("Seleccionar Sucursal (USADO26):", bocas_disp_u, default=bocas_disp_u, key="f_boca_uct")
+        st.markdown('</div>', unsafe_allow_html=True)
+
         if not df_usados_raw.empty:
             columnas_u = df_usados_raw.columns.tolist()
             col_nps_u = columnas_u[-1]
@@ -444,15 +461,6 @@ if not df_ventas_raw.empty:
             
             df_u_proc = df_usados_raw.copy()
             df_u_proc['Mes_Filtro'] = df_u_proc[col_fecha_u].astype(str).str.strip().str.capitalize()
-            
-            st.write("#### 🔍 Filtros de Período y Sucursal (UCT)")
-            filtro_u1, filtro_u2 = st.columns(2)
-            with filtro_u1:
-                meses_disp_u = [m for m in df_u_proc['Mes_Filtro'].unique() if m.lower() != 'nan']
-                mes_sel_u = st.multiselect("Seleccionar Meses (USADO26):", meses_disp_u, default=meses_disp_u)
-            with filtro_u2:
-                bocas_disp_u = sorted(df_u_proc[col_sucursal_u].dropna().astype(str).unique().tolist())
-                boca_sel_u = st.multiselect("Seleccionar Sucursal (USADO26):", bocas_disp_u, default=bocas_disp_u)
             
             df_u_filt = df_u_proc.copy()
             if mes_sel_u: df_u_filt = df_u_filt[df_u_filt['Mes_Filtro'].isin(mes_sel_u)]
@@ -582,26 +590,25 @@ if not df_ventas_raw.empty:
 
     # --- PESTAÑA 5: PLAN DE AHORRO (TPA) ---
     with tab_tpa:
-        st.write("### 📘 Gestión de Calidad: Toyota Plan de Ahorro (TPA)")
-        st.write("Métricas y evolución de satisfacción exclusiva para TPA.")
-        
+        # CONTENEDOR FIJO DE FILTROS (Sticky)
+        st.markdown('<div class="sticky-filters">', unsafe_allow_html=True)
+        st.write("#### 🔍 Filtros de Período y Sucursal (TPA)")
+        filtro_t1, filtro_t2 = st.columns(2)
+        with filtro_t1:
+            meses_disp_t = [m for m in df_t_proc['Mes_Filtro'].unique() if m.lower() != 'nan']
+            mes_sel_t = st.multiselect("Seleccionar Meses (TPA):", meses_disp_t, default=meses_disp_t, key="f_mes_tpa")
+        with filtro_t2:
+            bocas_disp_t = sorted(df_t_proc[col_suc_t].dropna().astype(str).unique().tolist())
+            boca_sel_t = st.multiselect("Seleccionar Sucursal (TPA):", bocas_disp_t, default=bocas_disp_t, key="f_boca_tpa")
+        st.markdown('</div>', unsafe_allow_html=True)
+
         if df_t_proc is not None:
-            st.write("#### 🔍 Filtros de Período y Sucursal (TPA)")
-            filtro_t1, filtro_t2 = st.columns(2)
-            with filtro_t1:
-                meses_disp_t = [m for m in df_t_proc['Mes_Filtro'].unique() if m.lower() != 'nan']
-                mes_sel_t = st.multiselect("Seleccionar Meses (TPA):", meses_disp_t, default=meses_disp_t)
-            with filtro_t2:
-                bocas_disp_t = sorted(df_t_proc[col_suc_t].dropna().astype(str).unique().tolist())
-                boca_sel_t = st.multiselect("Seleccionar Sucursal (TPA):", bocas_disp_t, default=bocas_disp_t)
-            
             df_t_filt = df_t_proc.copy()
             if mes_sel_t: df_t_filt = df_t_filt[df_t_filt['Mes_Filtro'].isin(mes_sel_t)]
             if boca_sel_t: df_t_filt = df_t_filt[df_t_filt[col_suc_t].astype(str).isin(boca_sel_t)]
             
             df_t_filt['Comentario_Cliente'] = df_t_filt[col_coment_t].fillna("Sin comentarios")
             
-            # FILTRO ESTRICTO: Solo contamos aquellos que tienen un estado válido
             df_nps_valid_t = df_t_filt[df_t_filt['Estado_NPS'].isin(['Promotor', 'Neutro', 'Detractor'])].copy()
             
             OBJETIVO_NPS_TPA = 85.0
