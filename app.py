@@ -107,12 +107,12 @@ def crear_reloj(valor, titulo, objetivo, max_val, color_ok="#2ecc71", color_bad=
         mode="gauge+number+delta", value=valor,
         number={'suffix': "%" if "NPS" in titulo else "", 'font': {'size': 40, 'color': color_actual}},
         delta={'reference': objetivo, 'increasing': {'color': color_ok}, 'decreasing': {'color': color_bad}},
-        title={'text': titulo, 'font': {'size': 20}},
+        title={'text': titulo, 'font': {'size': 18}},
         gauge={'axis': {'range': [-100 if "NPS" in titulo else 0, max_val], 'tickwidth': 1}, 'bar': {'color': color_actual},
                'steps': [{'range': [-100 if "NPS" in titulo else 0, objetivo], 'color': 'rgba(255,255,255,0.1)'}, {'range': [objetivo, max_val], 'color': 'rgba(255,255,255,0.2)'}],
                'threshold': {'line': {'color': "white", 'width': 4}, 'thickness': 0.75, 'value': objetivo}}
     ))
-    fig.update_layout(height=350, margin=dict(l=20, r=20, t=50, b=20), paper_bgcolor="rgba(0,0,0,0)", font={'color': "white"})
+    fig.update_layout(height=300, margin=dict(l=10, r=10, t=40, b=10), paper_bgcolor="rgba(0,0,0,0)", font={'color': "white"})
     return fig
 
 # Cargar los dataframes
@@ -196,7 +196,6 @@ if not df_ventas_raw.empty:
     if not df_tpa26_raw.empty:
         cols_tpa26 = df_tpa26_raw.columns.tolist()
         
-        # Mapeo por índices exactos según lo solicitado (A=0, B=1, E=4, F=5, G=6, I=8)
         col_estado_t26 = cols_tpa26[0] if len(cols_tpa26) > 0 else None
         col_cliente_t26 = cols_tpa26[1] if len(cols_tpa26) > 1 else None
         col_mes_t26 = cols_tpa26[4] if len(cols_tpa26) > 4 else None
@@ -209,7 +208,6 @@ if not df_ventas_raw.empty:
             df_tpa26_proc['Mes_Filtro'] = df_tpa26_proc[col_mes_t26].astype(str).str.strip().str.capitalize()
             df_tpa26_proc['Etapa_Filtro'] = df_tpa26_proc[col_etapa_t26].astype(str).str.strip().str.capitalize()
             
-            # Usar la nota (Columna F) para definir estrictamente el NPS
             df_tpa26_proc['Nota_Num'] = pd.to_numeric(df_tpa26_proc[col_nota_t26], errors='coerce')
             df_tpa26_proc['Estado_NPS'] = df_tpa26_proc['Nota_Num'].apply(obtener_estado_nps)
             df_tpa26_proc['Comentario_Cliente'] = df_tpa26_proc[col_coment_t26].fillna("Sin comentarios")
@@ -823,7 +821,7 @@ if not df_ventas_raw.empty:
     # --- PESTAÑA 6: ENCUESTAS DE MARCA (TPA26) ---
     with tab_tpa26:
         st.markdown('<div class="sticky-filters">', unsafe_allow_html=True)
-        st.write("#### 🔍 Filtros de Período y Etapa (TPA26 - TASA)")
+        st.write("#### 🔍 Filtros de Período y Etapa (TPA26 - Toyota)")
         filtro_t26_1, filtro_t26_2 = st.columns(2)
         with filtro_t26_1:
             meses_disp_t26 = [m for m in df_tpa26_proc['Mes_Filtro'].unique() if m.lower() != 'nan'] if df_tpa26_proc is not None else []
@@ -843,7 +841,7 @@ if not df_ventas_raw.empty:
             OBJETIVO_NPS_T26 = 85.0
             nps_t26_global = calcular_nps_texto(df_nps_valid_t26['Estado_NPS'])
 
-            st.write("### 📈 Encuestas de Marca (TASA - TPA26)")
+            st.write("### 📈 Encuestas de Marca (Toyota - TPA26)")
             st.write("Métricas de satisfacción global y por etapa.")
 
             c1, c2 = st.columns(2)
@@ -858,42 +856,68 @@ if not df_ventas_raw.empty:
                 ''', unsafe_allow_html=True)
             
             st.markdown("---")
-            st.write("#### 📊 NPS por Etapa")
+            st.write("#### 📊 Desglose de NPS por Etapa")
             
             etapas_unicas = [e for e in df_nps_valid_t26['Etapa_Filtro'].unique() if e.lower() != 'nan']
+            
             if etapas_unicas:
-                cols_etapas = st.columns(len(etapas_unicas))
+                # Creamos las dos filas de columnas (Relojes arriba, Barras con tabla abajo)
+                relojes_cols = st.columns(len(etapas_unicas))
+                barras_cols = st.columns(len(etapas_unicas))
+                
                 for i, etapa in enumerate(etapas_unicas):
                     df_etapa = df_nps_valid_t26[df_nps_valid_t26['Etapa_Filtro'] == etapa]
                     nps_etapa = calcular_nps_texto(df_etapa['Estado_NPS'])
-                    with cols_etapas[i]:
-                        st.plotly_chart(crear_reloj(nps_etapa, f"NPS - {etapa} ({len(df_etapa)} enc.)", OBJETIVO_NPS_T26, 100), use_container_width=True)
+                    
+                    # Fila 1: Relojes
+                    with relojes_cols[i]:
+                        st.plotly_chart(crear_reloj(nps_etapa, f"NPS - {etapa}", OBJETIVO_NPS_T26, 100), use_container_width=True)
+                        
+                    # Fila 2: Barras y Tabla expansible
+                    with barras_cols[i]:
+                        # Conteo para barras (Forzamos el orden: Detractor arriba, Promotor abajo)
+                        conteo = df_etapa['Estado_NPS'].value_counts().reindex(['Detractor', 'Neutro', 'Promotor']).fillna(0).reset_index()
+                        conteo.columns = ['Tipo de cliente', 'Recuento']
+                        
+                        fig_bar = px.bar(
+                            conteo, x='Recuento', y='Tipo de cliente', orientation='h',
+                            text='Recuento', color_discrete_sequence=['#3498db']
+                        )
+                        fig_bar.update_layout(
+                            title="Recuento de registros",
+                            xaxis_title="",
+                            yaxis_title="Tipo de cliente",
+                            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                            height=250,
+                            margin=dict(l=0, r=0, t=30, b=0),
+                            xaxis=dict(showgrid=True, gridcolor='rgba(128,128,128,0.2)'),
+                        )
+                        fig_bar.update_traces(textposition='outside')
+                        st.plotly_chart(fig_bar, use_container_width=True)
+                        
+                        # Tabla expansible imitando el "click / Ver informe"
+                        with st.expander(f"Ver informe ({etapa})"):
+                            cols_to_show_t26 = [col_cliente_t26, col_nota_t26, 'Estado_NPS', 'Comentario_Cliente']
+                            df_tabla_t26 = df_etapa[cols_to_show_t26].copy()
+                            
+                            df_tabla_t26['Orden_Gravedad'] = df_tabla_t26['Estado_NPS'].map({'Detractor': 1, 'Neutro': 2, 'Promotor': 3})
+                            df_tabla_t26 = df_tabla_t26.sort_values(by=['Orden_Gravedad'])
+                            df_tabla_t26 = df_tabla_t26.drop(columns=['Orden_Gravedad'])
+                            
+                            df_tabla_t26 = df_tabla_t26.rename(columns={
+                                col_cliente_t26: 'Nombre del Cliente',
+                                col_nota_t26: 'Nota',
+                                'Estado_NPS': 'Clasificación',
+                                'Comentario_Cliente': 'Comentario'
+                            })
 
-            st.markdown("---")
-            st.write("#### 📋 Registro Detallado de Clientes")
-            
-            cols_to_show_t26 = [col_cliente_t26, 'Etapa_Filtro', col_nota_t26, 'Estado_NPS', 'Comentario_Cliente']
-            df_tabla_t26 = df_nps_valid_t26[cols_to_show_t26].copy()
-            
-            df_tabla_t26['Orden_Gravedad'] = df_tabla_t26['Estado_NPS'].map({'Detractor': 1, 'Neutro': 2, 'Promotor': 3})
-            df_tabla_t26 = df_tabla_t26.sort_values(by=['Orden_Gravedad'])
-            df_tabla_t26 = df_tabla_t26.drop(columns=['Orden_Gravedad'])
-            
-            df_tabla_t26 = df_tabla_t26.rename(columns={
-                col_cliente_t26: 'Nombre del Cliente',
-                'Etapa_Filtro': 'Etapa',
-                col_nota_t26: 'Calificación (Nota)',
-                'Estado_NPS': 'Clasificación',
-                'Comentario_Cliente': 'Comentario del Cliente'
-            })
-
-            def color_clasificacion_t26(val):
-                if val == 'Detractor': return 'color: #e74c3c; font-weight: bold;'
-                elif val == 'Promotor': return 'color: #2ecc71; font-weight: bold;'
-                elif val == 'Neutro': return 'color: #f1c40f; font-weight: bold;'
-                return ''
-                
-            st.dataframe(df_tabla_t26.style.map(color_clasificacion_t26, subset=['Clasificación']), use_container_width=True, hide_index=True)
+                            def color_clasificacion_t26(val):
+                                if val == 'Detractor': return 'color: #e74c3c; font-weight: bold;'
+                                elif val == 'Promotor': return 'color: #2ecc71; font-weight: bold;'
+                                elif val == 'Neutro': return 'color: #f1c40f; font-weight: bold;'
+                                return ''
+                                
+                            st.dataframe(df_tabla_t26.style.map(color_clasificacion_t26, subset=['Clasificación']), use_container_width=True, hide_index=True)
         else:
             st.warning("No se pudo cargar la hoja TPA26. Verifica que existan las columnas indicadas.")
 
