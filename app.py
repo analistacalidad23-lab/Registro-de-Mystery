@@ -162,7 +162,6 @@ if not df_ventas_raw.empty:
     if not df_tpa_raw.empty:
         columnas_tpa = df_tpa_raw.columns.tolist()
         
-        # Mapeo de columnas TPA (incluyendo Scoring en columna O -> índice 14)
         col_mes_t = columnas_tpa[7] if len(columnas_tpa) > 7 else next((c for c in columnas_tpa if 'mes' in c.lower() or 'fecha' in c.lower()), columnas_tpa[0])
         col_cliente_t = columnas_tpa[9] if len(columnas_tpa) > 9 else next((c for c in columnas_tpa if 'suscriptor' in c.lower() or 'cliente' in c.lower() or 'nombre' in c.lower()), columnas_tpa[0])
         col_scoring_t = columnas_tpa[14] if len(columnas_tpa) > 14 else next((c for c in columnas_tpa if 'scoring' in c.lower()), columnas_tpa[0])
@@ -179,13 +178,14 @@ if not df_ventas_raw.empty:
         df_t_proc['Mes_Num'] = df_t_proc['Mes_Filtro'].map(meses_orden).fillna(99)
         df_t_proc = df_t_proc.sort_values('Mes_Num')
         
-        # Limpieza de Estado NPS
         df_t_proc['Estado_NPS'] = df_t_proc[col_estado_t].apply(lambda x: str(x).strip().capitalize() if pd.notna(x) else 'Sin dato')
         df_t_proc['Estado_NPS'] = df_t_proc['Estado_NPS'].replace({'Promotores': 'Promotor', 'Detractores': 'Detractor', 'Neutros': 'Neutro'})
 
-        # Limpieza de Scoring
         df_t_proc['Scoring_Clean'] = df_t_proc[col_scoring_t].astype(str).str.lower().str.strip()
-        df_t_proc['Scoring_Clean'] = df_t_proc['Scoring_Clean'].str.replace('í', 'i').str.replace('ó', 'o') # Normalizar caídos
+        df_t_proc['Scoring_Clean'] = df_t_proc['Scoring_Clean'].str.replace('í', 'i').str.replace('ó', 'o')
+        
+        meses_disp_tpa_com = [m for m in df_t_proc['Mes_Filtro'].unique() if m.lower() != 'nan']
+        bocas_disp_tpa_com = sorted(df_t_proc[col_suc_t].dropna().astype(str).unique().tolist())
 
     # 5. Creación de Pestañas
     tab_convencional, tab_ranking, tab_comisiones, tab_usados, tab_tpa, tab_criterios = st.tabs([
@@ -345,31 +345,42 @@ if not df_ventas_raw.empty:
         for vend, grupo in df_filt_rank.groupby(col_vendedor):
             resumen.append({'Vendedor': vend, 'Encuestas': len(grupo), 'SSI_Promedio': grupo['SSI_Num'].mean(), 'NPS': calcular_nps(grupo[col_nps])})
             
-        df_resumen = pd.DataFrame(resumen).sort_values('SSI_Promedio', ascending=False).dropna(subset=['SSI_Promedio'])
+        df_resumen = pd.DataFrame(resumen).dropna(subset=['SSI_Promedio'])
+        # ORDENAR DE MENOR A MAYOR PARA QUE EL MEJOR QUEDE ARRIBA EN EL GRÁFICO HORIZONTAL
+        df_resumen = df_resumen.sort_values('SSI_Promedio', ascending=True)
+        
         if not df_resumen.empty:
             fig_ranking = go.Figure()
+            
+            # Barras Horizontales
             fig_ranking.add_trace(go.Bar(
-                x=df_resumen['Vendedor'], y=df_resumen['SSI_Promedio'], name='SSI', marker_color='#3498db', 
+                y=df_resumen['Vendedor'], x=df_resumen['SSI_Promedio'], name='SSI', marker_color='#3498db', orientation='h',
                 text=df_resumen['SSI_Promedio'].apply(lambda x: f"<b>{x:.1f}</b>"), textposition='auto', textfont=dict(color='white')
             ))
             fig_ranking.add_trace(go.Bar(
-                x=df_resumen['Vendedor'], y=df_resumen['NPS'], name='NPS (%)', marker_color='#9b59b6', 
+                y=df_resumen['Vendedor'], x=df_resumen['NPS'], name='NPS (%)', marker_color='#9b59b6', orientation='h',
                 text=df_resumen['NPS'].apply(lambda x: f"<b>{x:.1f}%</b>" if pd.notna(x) else "N/D"), textposition='auto', textfont=dict(color='white')
             ))
             fig_ranking.add_trace(go.Scatter(
-                x=df_resumen['Vendedor'], y=df_resumen['Encuestas'], name='Cant. Encuestas', mode='lines+markers+text', 
-                yaxis='y2', marker=dict(color='#e67e22', size=12), line=dict(color='#e67e22', dash='dot'), 
-                text=df_resumen['Encuestas'].apply(lambda x: f"<b>{x}</b>"), textposition='top center', textfont=dict(color='white', size=14)
+                y=df_resumen['Vendedor'], x=df_resumen['Encuestas'], name='Cant. Encuestas', mode='lines+markers+text', 
+                xaxis='x2', marker=dict(color='#e67e22', size=12), line=dict(color='#e67e22', dash='dot'), 
+                text=df_resumen['Encuestas'].apply(lambda x: f"<b>{x}</b>"), textposition='middle right', textfont=dict(color='white', size=14)
             ))
             
-            y2_max_rank = max(10, df_resumen['Encuestas'].max() * 1.5)
-            y2_min_rank = - (100 / 110) * y2_max_rank
+            x2_max_rank = max(10, df_resumen['Encuestas'].max() * 1.5)
+            x2_min_rank = - (100 / 110) * x2_max_rank
+
+            # Ajuste dinámico de altura para que los nombres no se amontonen
+            altura_dinamica = max(400, len(df_resumen) * 45)
 
             fig_ranking.update_layout(
-                barmode='group', xaxis_title="Vendedor", 
-                yaxis=dict(title="Puntaje", range=[-100, 110], zeroline=True, zerolinecolor='rgba(231, 76, 60, 0.5)', zerolinewidth=2), 
-                yaxis2=dict(title="Encuestas", overlaying='y', side='right', range=[y2_min_rank, y2_max_rank], showgrid=False, zeroline=False), 
-                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)"
+                barmode='group', 
+                yaxis_title="Vendedor", 
+                xaxis=dict(title="Puntaje", range=[-100, 110], zeroline=True, zerolinecolor='rgba(231, 76, 60, 0.5)', zerolinewidth=2), 
+                xaxis2=dict(title="Encuestas", overlaying='x', side='top', range=[x2_min_rank, x2_max_rank], showgrid=False, zeroline=False), 
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                height=altura_dinamica,
+                margin=dict(l=150) # Espacio para leer los nombres
             )
             st.plotly_chart(fig_ranking, use_container_width=True)
 
@@ -377,13 +388,17 @@ if not df_ventas_raw.empty:
     with tab_comisiones:
         st.markdown('<div class="sticky-filters">', unsafe_allow_html=True)
         st.write("#### 🔍 Filtros de Liquidación (Comisiones)")
-        f_com1, f_com2 = st.columns(2)
+        f_com1, f_com2, f_com3, f_com4 = st.columns(4)
         with f_com1:
-            meses_sel_com_0km = st.multiselect("Seleccionar Meses (Comisión 0km):", meses_disp_0km, default=meses_disp_0km, key="f_mes_com_0km")
+            meses_sel_com_0km = st.multiselect("Meses (0km):", meses_disp_0km, default=meses_disp_0km, key="f_mes_com_0km")
         with f_com2:
+            boca_sel_com_0km = st.selectbox("Sucursal (0km):", ["Todas"] + bocas_disp_0km, key="f_boca_com_0km")
+        with f_com3:
             if df_t_proc is not None:
-                meses_disp_tpa_com = [m for m in df_t_proc['Mes_Filtro'].unique() if m.lower() != 'nan']
-                mes_sel_tpa_com = st.multiselect("Seleccionar Meses (Comisión TPA):", meses_disp_tpa_com, default=meses_disp_tpa_com, key="f_mes_com_tpa")
+                meses_sel_tpa_com = st.multiselect("Meses (TPA):", meses_disp_tpa_com, default=meses_disp_tpa_com, key="f_mes_com_tpa")
+        with f_com4:
+            if df_t_proc is not None:
+                boca_sel_tpa_com = st.multiselect("Sucursal (TPA):", bocas_disp_tpa_com, default=bocas_disp_tpa_com, key="f_boca_com_tpa")
         st.markdown('</div>', unsafe_allow_html=True)
 
         st.write("### 💰 Tabla de Cálculo de Comisiones SSI (0km)")
@@ -392,6 +407,8 @@ if not df_ventas_raw.empty:
             df_com_0km_filt = df_procesado.copy()
             if meses_sel_com_0km:
                 df_com_0km_filt = df_com_0km_filt[df_com_0km_filt['Mes_Período'].isin(meses_sel_com_0km)]
+            if boca_sel_com_0km != "Todas":
+                df_com_0km_filt = df_com_0km_filt[df_com_0km_filt[col_sucursal].astype(str) == boca_sel_com_0km]
 
             datos_comision = []
             for vend, grupo in df_com_0km_filt.groupby(col_vendedor):
@@ -412,7 +429,7 @@ if not df_ventas_raw.empty:
                     .map(lambda val: 'color: #e74c3c; font-weight: bold;' if val == -0.05 else ('color: #2ecc71; font-weight: bold;' if val == 0.01 else 'color: #7f8c8d;'), subset=['Comisión SSI']),
                     use_container_width=True, hide_index=True
                 )
-            else: st.warning("Datos insuficientes para el cálculo de comisiones de 0km en el período seleccionado.")
+            else: st.warning("Datos insuficientes para el cálculo de comisiones de 0km en el período y sucursal seleccionados.")
 
         st.markdown("---")
         st.write("### 💰 Tabla de Cálculo de Comisiones NPS (Toyota Plan de Ahorro)")
@@ -421,6 +438,8 @@ if not df_ventas_raw.empty:
             df_tpa_comision = df_t_proc.copy()
             if mes_sel_tpa_com:
                 df_tpa_comision = df_tpa_comision[df_tpa_comision['Mes_Filtro'].isin(mes_sel_tpa_com)]
+            if boca_sel_tpa_com:
+                df_tpa_comision = df_tpa_comision[df_tpa_comision[col_suc_t].astype(str).isin(boca_sel_tpa_com)]
                 
             df_nps_valid_com = df_tpa_comision[df_tpa_comision['Estado_NPS'].isin(['Promotor', 'Neutro', 'Detractor'])]
             
@@ -454,7 +473,7 @@ if not df_ventas_raw.empty:
                     use_container_width=True, hide_index=True
                 )
             else:
-                st.warning("No hay encuestas válidas de TPA en el período seleccionado para calcular comisiones.")
+                st.warning("No hay encuestas válidas de TPA en el período y sucursal seleccionados para calcular comisiones.")
         else:
             st.warning("No se pudo cargar la hoja de TPA. Verifica que el enlace sea correcto.")
 
@@ -732,11 +751,9 @@ if not df_ventas_raw.empty:
                     
                 st.dataframe(df_tabla_nps_t.style.map(color_clasificacion_t, subset=['Clasificación']), use_container_width=True, hide_index=True)
                 
-                # --- NUEVA SECCIÓN: INDICADORES DE SCORING ---
                 st.write("---")
                 st.write("### 📈 Indicadores de Scoring (TPA)")
                 
-                # Filtramos para tener solo los valores válidos de Scoring usando la columna procesada 'Scoring_Clean'
                 df_scoring = df_t_filt[df_t_filt['Scoring_Clean'].isin(['ok', 'pendiente', 'caido', 'caído', 'caida'])].copy()
                 
                 total_scoring = len(df_scoring)
@@ -759,11 +776,8 @@ if not df_ventas_raw.empty:
                 if not df_alertas_scoring.empty:
                     cols_to_show = [col_vend_t, col_suc_t, col_cliente_t, 'Mes_Filtro', col_scoring_t]
                     df_alertas_show = df_alertas_scoring[cols_to_show].rename(columns={
-                        col_vend_t: 'Vendedor',
-                        col_suc_t: 'Sucursal',
-                        col_cliente_t: 'Cliente',
-                        'Mes_Filtro': 'Mes',
-                        col_scoring_t: 'Estado Scoring'
+                        col_vend_t: 'Vendedor', col_suc_t: 'Sucursal', col_cliente_t: 'Cliente',
+                        'Mes_Filtro': 'Mes', col_scoring_t: 'Estado Scoring'
                     })
                     
                     def color_scoring(val):
