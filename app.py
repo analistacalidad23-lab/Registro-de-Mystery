@@ -346,13 +346,11 @@ if not df_ventas_raw.empty:
             resumen.append({'Vendedor': vend, 'Encuestas': len(grupo), 'SSI_Promedio': grupo['SSI_Num'].mean(), 'NPS': calcular_nps(grupo[col_nps])})
             
         df_resumen = pd.DataFrame(resumen).dropna(subset=['SSI_Promedio'])
-        # ORDENAR DE MENOR A MAYOR PARA QUE EL MEJOR QUEDE ARRIBA EN EL GRÁFICO HORIZONTAL
         df_resumen = df_resumen.sort_values('SSI_Promedio', ascending=True)
         
         if not df_resumen.empty:
             fig_ranking = go.Figure()
             
-            # Barras Horizontales
             fig_ranking.add_trace(go.Bar(
                 y=df_resumen['Vendedor'], x=df_resumen['SSI_Promedio'], name='SSI', marker_color='#3498db', orientation='h',
                 text=df_resumen['SSI_Promedio'].apply(lambda x: f"<b>{x:.1f}</b>"), textposition='auto', textfont=dict(color='white')
@@ -370,7 +368,6 @@ if not df_ventas_raw.empty:
             x2_max_rank = max(10, df_resumen['Encuestas'].max() * 1.5)
             x2_min_rank = - (100 / 110) * x2_max_rank
 
-            # Ajuste dinámico de altura para que los nombres no se amontonen
             altura_dinamica = max(400, len(df_resumen) * 45)
 
             fig_ranking.update_layout(
@@ -380,7 +377,7 @@ if not df_ventas_raw.empty:
                 xaxis2=dict(title="Encuestas", overlaying='x', side='top', range=[x2_min_rank, x2_max_rank], showgrid=False, zeroline=False), 
                 paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                 height=altura_dinamica,
-                margin=dict(l=150) # Espacio para leer los nombres
+                margin=dict(l=150)
             )
             st.plotly_chart(fig_ranking, use_container_width=True)
 
@@ -436,8 +433,10 @@ if not df_ventas_raw.empty:
         
         if df_t_proc is not None:
             df_tpa_comision = df_t_proc.copy()
-            if mes_sel_tpa_com:
-                df_tpa_comision = df_tpa_comision[df_tpa_comision['Mes_Filtro'].isin(mes_sel_tpa_com)]
+            
+            # ---> AQUÍ CORREGIMOS EL ERROR (FALTA LA S EN MESES) <---
+            if meses_sel_tpa_com: 
+                df_tpa_comision = df_tpa_comision[df_tpa_comision['Mes_Filtro'].isin(meses_sel_tpa_com)]
             if boca_sel_tpa_com:
                 df_tpa_comision = df_tpa_comision[df_tpa_comision[col_suc_t].astype(str).isin(boca_sel_tpa_com)]
                 
