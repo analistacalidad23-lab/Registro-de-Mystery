@@ -186,7 +186,7 @@ if not df_ventas_raw.empty:
         df_t_proc['Scoring_Clean'] = df_t_proc[col_scoring_t].astype(str).str.lower().str.strip()
         df_t_proc['Scoring_Clean'] = df_t_proc['Scoring_Clean'].str.replace('í', 'i').str.replace('ó', 'o')
         
-        meses_disp_tpa_com = [m for m in df_t_proc['Mes_Filtro'].unique() if m.lower() != 'nan']
+        meses_disp_tpa_com = [m for m in df_t_proc['Mes_Filtro'].unique() if str(m).lower() != 'nan']
         bocas_disp_tpa_com = sorted(df_t_proc[col_suc_t].dropna().astype(str).unique().tolist())
 
     # ---------------------------------------------------------
@@ -205,7 +205,17 @@ if not df_ventas_raw.empty:
 
         if col_mes_t26 and col_nota_t26 and col_etapa_t26:
             df_tpa26_proc = df_tpa26_raw.copy()
-            df_tpa26_proc['Mes_Filtro'] = df_tpa26_proc[col_mes_t26].astype(str).str.strip().str.capitalize()
+            
+            # --- AGRUPACIÓN DE FECHAS A MESES (Ej: "24/7/2026" a "Julio") ---
+            df_tpa26_proc['Fecha_DT'] = pd.to_datetime(df_tpa26_proc[col_mes_t26], errors='coerce', dayfirst=True)
+            df_tpa26_proc['Mes_Num'] = df_tpa26_proc['Fecha_DT'].dt.month.fillna(99)
+            meses_es_t26 = {1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril', 5: 'Mayo', 6: 'Junio', 
+                            7: 'Julio', 8: 'Agosto', 9: 'Septiembre', 10: 'Octubre', 11: 'Noviembre', 12: 'Diciembre'}
+            df_tpa26_proc['Mes_Filtro'] = df_tpa26_proc['Mes_Num'].map(meses_es_t26).fillna(df_tpa26_proc[col_mes_t26].astype(str))
+            
+            # Ordenamos cronológicamente
+            df_tpa26_proc = df_tpa26_proc.sort_values('Mes_Num')
+            
             df_tpa26_proc['Etapa_Filtro'] = df_tpa26_proc[col_etapa_t26].astype(str).str.strip().str.capitalize()
             
             df_tpa26_proc['Nota_Num'] = pd.to_numeric(df_tpa26_proc[col_nota_t26], errors='coerce')
@@ -824,7 +834,7 @@ if not df_ventas_raw.empty:
         st.write("#### 🔍 Filtros de Período y Etapa (TPA26 - Toyota)")
         filtro_t26_1, filtro_t26_2 = st.columns(2)
         with filtro_t26_1:
-            meses_disp_t26 = [m for m in df_tpa26_proc['Mes_Filtro'].unique() if m.lower() != 'nan'] if df_tpa26_proc is not None else []
+            meses_disp_t26 = [m for m in df_tpa26_proc['Mes_Filtro'].unique() if str(m).lower() not in ['nan', 'nat']] if df_tpa26_proc is not None else []
             mes_sel_t26 = st.multiselect("Seleccionar Meses (TPA26):", meses_disp_t26, default=meses_disp_t26, key="f_mes_tpa26")
         with filtro_t26_2:
             etapas_disp_t26 = sorted(df_tpa26_proc['Etapa_Filtro'].dropna().unique().tolist()) if df_tpa26_proc is not None else []
@@ -861,7 +871,6 @@ if not df_ventas_raw.empty:
             etapas_unicas = [e for e in df_nps_valid_t26['Etapa_Filtro'].unique() if e.lower() != 'nan']
             
             if etapas_unicas:
-                # Creamos las dos filas de columnas (Relojes arriba, Barras con tabla abajo)
                 relojes_cols = st.columns(len(etapas_unicas))
                 barras_cols = st.columns(len(etapas_unicas))
                 
@@ -869,13 +878,10 @@ if not df_ventas_raw.empty:
                     df_etapa = df_nps_valid_t26[df_nps_valid_t26['Etapa_Filtro'] == etapa]
                     nps_etapa = calcular_nps_texto(df_etapa['Estado_NPS'])
                     
-                    # Fila 1: Relojes
                     with relojes_cols[i]:
                         st.plotly_chart(crear_reloj(nps_etapa, f"NPS - {etapa}", OBJETIVO_NPS_T26, 100), use_container_width=True)
                         
-                    # Fila 2: Barras y Tabla expansible
                     with barras_cols[i]:
-                        # Conteo para barras (Forzamos el orden: Detractor arriba, Promotor abajo)
                         conteo = df_etapa['Estado_NPS'].value_counts().reindex(['Detractor', 'Neutro', 'Promotor']).fillna(0).reset_index()
                         conteo.columns = ['Tipo de cliente', 'Recuento']
                         
@@ -895,7 +901,6 @@ if not df_ventas_raw.empty:
                         fig_bar.update_traces(textposition='outside')
                         st.plotly_chart(fig_bar, use_container_width=True)
                         
-                        # Tabla expansible imitando el "click / Ver informe"
                         with st.expander(f"Ver informe ({etapa})"):
                             cols_to_show_t26 = [col_cliente_t26, col_nota_t26, 'Estado_NPS', 'Comentario_Cliente']
                             df_tabla_t26 = df_etapa[cols_to_show_t26].copy()
