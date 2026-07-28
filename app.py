@@ -45,6 +45,7 @@ st.sidebar.markdown("---")
 SHEET_ID_VENTAS = "1PGoOlFTN2WuuiEqRk0KPrcLZL6pEcFVeNWo35shsUSA"
 URL_VENTAS = f"https://docs.google.com/spreadsheets/d/{SHEET_ID_VENTAS}/gviz/tq?tqx=out:csv&sheet=VENTAS26"
 URL_USADOS = f"https://docs.google.com/spreadsheets/d/{SHEET_ID_VENTAS}/gviz/tq?tqx=out:csv&sheet=USADO26"
+URL_TPA26 = f"https://docs.google.com/spreadsheets/d/{SHEET_ID_VENTAS}/gviz/tq?tqx=out:csv&sheet=TPA26"
 
 SHEET_ID_TPA = "1-kBeBdC60rBwsV-rUTlVLSnr2kkI4eJzvW0mA_IvtBg"
 URL_TPA = f"https://docs.google.com/spreadsheets/d/{SHEET_ID_TPA}/gviz/tq?tqx=out:csv&sheet=Base%20Datos%20Actualizada"
@@ -118,6 +119,7 @@ def crear_reloj(valor, titulo, objetivo, max_val, color_ok="#2ecc71", color_bad=
 df_ventas_raw = cargar_datos(URL_VENTAS)
 df_usados_raw = cargar_datos(URL_USADOS)
 df_tpa_raw = cargar_datos(URL_TPA)
+df_tpa26_raw = cargar_datos(URL_TPA26)
 
 if not df_ventas_raw.empty:
     columnas_disponibles = df_ventas_raw.columns.tolist()
@@ -156,7 +158,7 @@ if not df_ventas_raw.empty:
     bocas_disp_0km = sorted(df_procesado[col_sucursal].dropna().astype(str).unique().tolist())
 
     # ---------------------------------------------------------
-    # PROCESAMIENTO GLOBAL DE TPA
+    # PROCESAMIENTO GLOBAL DE TPA (Hoja Separada)
     # ---------------------------------------------------------
     df_t_proc = None
     if not df_tpa_raw.empty:
@@ -187,13 +189,39 @@ if not df_ventas_raw.empty:
         meses_disp_tpa_com = [m for m in df_t_proc['Mes_Filtro'].unique() if m.lower() != 'nan']
         bocas_disp_tpa_com = sorted(df_t_proc[col_suc_t].dropna().astype(str).unique().tolist())
 
+    # ---------------------------------------------------------
+    # PROCESAMIENTO GLOBAL TPA26 (Encuestas de Marca TASA)
+    # ---------------------------------------------------------
+    df_tpa26_proc = None
+    if not df_tpa26_raw.empty:
+        cols_tpa26 = df_tpa26_raw.columns.tolist()
+        
+        # Mapeo por índices exactos según lo solicitado (A=0, B=1, E=4, F=5, G=6, I=8)
+        col_estado_t26 = cols_tpa26[0] if len(cols_tpa26) > 0 else None
+        col_cliente_t26 = cols_tpa26[1] if len(cols_tpa26) > 1 else None
+        col_mes_t26 = cols_tpa26[4] if len(cols_tpa26) > 4 else None
+        col_nota_t26 = cols_tpa26[5] if len(cols_tpa26) > 5 else None
+        col_etapa_t26 = cols_tpa26[6] if len(cols_tpa26) > 6 else None
+        col_coment_t26 = cols_tpa26[8] if len(cols_tpa26) > 8 else None
+
+        if col_mes_t26 and col_nota_t26 and col_etapa_t26:
+            df_tpa26_proc = df_tpa26_raw.copy()
+            df_tpa26_proc['Mes_Filtro'] = df_tpa26_proc[col_mes_t26].astype(str).str.strip().str.capitalize()
+            df_tpa26_proc['Etapa_Filtro'] = df_tpa26_proc[col_etapa_t26].astype(str).str.strip().str.capitalize()
+            
+            # Usar la nota (Columna F) para definir estrictamente el NPS
+            df_tpa26_proc['Nota_Num'] = pd.to_numeric(df_tpa26_proc[col_nota_t26], errors='coerce')
+            df_tpa26_proc['Estado_NPS'] = df_tpa26_proc['Nota_Num'].apply(obtener_estado_nps)
+            df_tpa26_proc['Comentario_Cliente'] = df_tpa26_proc[col_coment_t26].fillna("Sin comentarios")
+
     # 5. Creación de Pestañas
-    tab_convencional, tab_ranking, tab_comisiones, tab_usados, tab_tpa, tab_criterios = st.tabs([
+    tab_convencional, tab_ranking, tab_comisiones, tab_usados, tab_tpa, tab_tpa26, tab_criterios = st.tabs([
         "📊 Venta Convencional 0km", 
         "🏆 Ranking Vendedores", 
         "💰 Comisiones",
         "🚗 Usados Certificados",
         "📘 Plan de Ahorro (TPA)",
+        "📈 Encuestas de Marca (TPA26)",
         "📋 Criterios de Puntaje"
     ])
 
@@ -433,8 +461,6 @@ if not df_ventas_raw.empty:
         
         if df_t_proc is not None:
             df_tpa_comision = df_t_proc.copy()
-            
-            # ---> AQUÍ CORREGIMOS EL ERROR (FALTA LA S EN MESES) <---
             if meses_sel_tpa_com: 
                 df_tpa_comision = df_tpa_comision[df_tpa_comision['Mes_Filtro'].isin(meses_sel_tpa_com)]
             if boca_sel_tpa_com:
@@ -794,7 +820,84 @@ if not df_ventas_raw.empty:
         else:
             st.warning("No se pudo cargar la hoja de TPA. Verifica que el enlace sea correcto.")
 
-    # --- PESTAÑA 6: CRITERIOS DE ASIGNACIÓN DE PUNTAJE ---
+    # --- PESTAÑA 6: ENCUESTAS DE MARCA (TPA26) ---
+    with tab_tpa26:
+        st.markdown('<div class="sticky-filters">', unsafe_allow_html=True)
+        st.write("#### 🔍 Filtros de Período y Etapa (TPA26 - TASA)")
+        filtro_t26_1, filtro_t26_2 = st.columns(2)
+        with filtro_t26_1:
+            meses_disp_t26 = [m for m in df_tpa26_proc['Mes_Filtro'].unique() if m.lower() != 'nan'] if df_tpa26_proc is not None else []
+            mes_sel_t26 = st.multiselect("Seleccionar Meses (TPA26):", meses_disp_t26, default=meses_disp_t26, key="f_mes_tpa26")
+        with filtro_t26_2:
+            etapas_disp_t26 = sorted(df_tpa26_proc['Etapa_Filtro'].dropna().unique().tolist()) if df_tpa26_proc is not None else []
+            etapa_sel_t26 = st.multiselect("Seleccionar Etapa:", etapas_disp_t26, default=etapas_disp_t26, key="f_etapa_tpa26")
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        if df_tpa26_proc is not None:
+            df_t26_filt = df_tpa26_proc.copy()
+            if mes_sel_t26: df_t26_filt = df_t26_filt[df_t26_filt['Mes_Filtro'].isin(mes_sel_t26)]
+            if etapa_sel_t26: df_t26_filt = df_t26_filt[df_t26_filt['Etapa_Filtro'].isin(etapa_sel_t26)]
+
+            df_nps_valid_t26 = df_t26_filt[df_t26_filt['Estado_NPS'].isin(['Promotor', 'Neutro', 'Detractor'])].copy()
+
+            OBJETIVO_NPS_T26 = 85.0
+            nps_t26_global = calcular_nps_texto(df_nps_valid_t26['Estado_NPS'])
+
+            st.write("### 📈 Encuestas de Marca (TASA - TPA26)")
+            st.write("Métricas de satisfacción global y por etapa.")
+
+            c1, c2 = st.columns(2)
+            with c1:
+                st.plotly_chart(crear_reloj(nps_t26_global, "NPS Transaccional (Global)", OBJETIVO_NPS_T26, 100), use_container_width=True)
+            with c2:
+                st.markdown(f'''
+                    <div style="background-color:#F8FAFC; padding:15px; border-radius:8px; border-left:5px solid #3498db; box-shadow:0 1px 3px rgba(0,0,0,0.05); text-align:center; height:100%; display:flex; flex-direction:column; justify-content:center;">
+                        <span style="color:#555; font-size:16px; font-weight:bold;">TOTAL DE ENCUESTAS</span><br>
+                        <span style="font-size:48px; font-weight:bold; color:#1E3A8A;">{len(df_nps_valid_t26)}</span>
+                    </div>
+                ''', unsafe_allow_html=True)
+            
+            st.markdown("---")
+            st.write("#### 📊 NPS por Etapa")
+            
+            etapas_unicas = [e for e in df_nps_valid_t26['Etapa_Filtro'].unique() if e.lower() != 'nan']
+            if etapas_unicas:
+                cols_etapas = st.columns(len(etapas_unicas))
+                for i, etapa in enumerate(etapas_unicas):
+                    df_etapa = df_nps_valid_t26[df_nps_valid_t26['Etapa_Filtro'] == etapa]
+                    nps_etapa = calcular_nps_texto(df_etapa['Estado_NPS'])
+                    with cols_etapas[i]:
+                        st.plotly_chart(crear_reloj(nps_etapa, f"NPS - {etapa} ({len(df_etapa)} enc.)", OBJETIVO_NPS_T26, 100), use_container_width=True)
+
+            st.markdown("---")
+            st.write("#### 📋 Registro Detallado de Clientes")
+            
+            cols_to_show_t26 = [col_cliente_t26, 'Etapa_Filtro', col_nota_t26, 'Estado_NPS', 'Comentario_Cliente']
+            df_tabla_t26 = df_nps_valid_t26[cols_to_show_t26].copy()
+            
+            df_tabla_t26['Orden_Gravedad'] = df_tabla_t26['Estado_NPS'].map({'Detractor': 1, 'Neutro': 2, 'Promotor': 3})
+            df_tabla_t26 = df_tabla_t26.sort_values(by=['Orden_Gravedad'])
+            df_tabla_t26 = df_tabla_t26.drop(columns=['Orden_Gravedad'])
+            
+            df_tabla_t26 = df_tabla_t26.rename(columns={
+                col_cliente_t26: 'Nombre del Cliente',
+                'Etapa_Filtro': 'Etapa',
+                col_nota_t26: 'Calificación (Nota)',
+                'Estado_NPS': 'Clasificación',
+                'Comentario_Cliente': 'Comentario del Cliente'
+            })
+
+            def color_clasificacion_t26(val):
+                if val == 'Detractor': return 'color: #e74c3c; font-weight: bold;'
+                elif val == 'Promotor': return 'color: #2ecc71; font-weight: bold;'
+                elif val == 'Neutro': return 'color: #f1c40f; font-weight: bold;'
+                return ''
+                
+            st.dataframe(df_tabla_t26.style.map(color_clasificacion_t26, subset=['Clasificación']), use_container_width=True, hide_index=True)
+        else:
+            st.warning("No se pudo cargar la hoja TPA26. Verifica que existan las columnas indicadas.")
+
+    # --- PESTAÑA 7: CRITERIOS DE ASIGNACIÓN DE PUNTAJE ---
     with tab_criterios:
         st.write("### 📋 Criterios de Asignación de Puntaje")
         st.write("Resumen de las métricas y porcentajes de alcance para el cálculo de objetivos y comisiones.")
