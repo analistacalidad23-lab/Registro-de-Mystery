@@ -162,8 +162,10 @@ if not df_ventas_raw.empty:
     if not df_tpa_raw.empty:
         columnas_tpa = df_tpa_raw.columns.tolist()
         
+        # Mapeo de columnas TPA (incluyendo Scoring en columna O -> índice 14)
         col_mes_t = columnas_tpa[7] if len(columnas_tpa) > 7 else next((c for c in columnas_tpa if 'mes' in c.lower() or 'fecha' in c.lower()), columnas_tpa[0])
         col_cliente_t = columnas_tpa[9] if len(columnas_tpa) > 9 else next((c for c in columnas_tpa if 'suscriptor' in c.lower() or 'cliente' in c.lower() or 'nombre' in c.lower()), columnas_tpa[0])
+        col_scoring_t = columnas_tpa[14] if len(columnas_tpa) > 14 else next((c for c in columnas_tpa if 'scoring' in c.lower()), columnas_tpa[0])
         col_suc_t = columnas_tpa[23] if len(columnas_tpa) > 23 else next((c for c in columnas_tpa if 'sucursal' in c.lower() or 'boca' in c.lower()), columnas_tpa[0])
         col_vend_t = columnas_tpa[31] if len(columnas_tpa) > 31 else next((c for c in columnas_tpa if 'vendedor' in c.lower() or 'asesor' in c.lower()), columnas_tpa[0])
         col_coment_t = columnas_tpa[36] if len(columnas_tpa) > 36 else next((c for c in columnas_tpa if 'comentario' in c.lower() or 'observaci' in c.lower()), columnas_tpa[0])
@@ -177,8 +179,13 @@ if not df_ventas_raw.empty:
         df_t_proc['Mes_Num'] = df_t_proc['Mes_Filtro'].map(meses_orden).fillna(99)
         df_t_proc = df_t_proc.sort_values('Mes_Num')
         
+        # Limpieza de Estado NPS
         df_t_proc['Estado_NPS'] = df_t_proc[col_estado_t].apply(lambda x: str(x).strip().capitalize() if pd.notna(x) else 'Sin dato')
         df_t_proc['Estado_NPS'] = df_t_proc['Estado_NPS'].replace({'Promotores': 'Promotor', 'Detractores': 'Detractor', 'Neutros': 'Neutro'})
+
+        # Limpieza de Scoring
+        df_t_proc['Scoring_Clean'] = df_t_proc[col_scoring_t].astype(str).str.lower().str.strip()
+        df_t_proc['Scoring_Clean'] = df_t_proc['Scoring_Clean'].str.replace('í', 'i').str.replace('ó', 'o') # Normalizar caídos
 
     # 5. Creación de Pestañas
     tab_convencional, tab_ranking, tab_comisiones, tab_usados, tab_tpa, tab_criterios = st.tabs([
@@ -192,7 +199,6 @@ if not df_ventas_raw.empty:
 
     # --- PESTAÑA 1: VENTA CONVENCIONAL 0KM ---
     with tab_convencional:
-        # CONTENEDOR FIJO DE FILTROS (Sticky)
         st.markdown('<div class="sticky-filters">', unsafe_allow_html=True)
         st.write("#### 🔍 Filtros de Visualización (0km)")
         f_col1, f_col2 = st.columns(2)
@@ -203,7 +209,6 @@ if not df_ventas_raw.empty:
             boca_sel = st.selectbox("Seleccionar Sucursal (Boca de Venta):", ["Todas"] + bocas_disp_0km, key="f_boca_0km")
         st.markdown('</div>', unsafe_allow_html=True)
 
-        # Aplicar filtros
         df_filtrado = df_procesado.copy()
         if boca_sel != "Todas": df_filtrado = df_filtrado[df_filtrado[col_sucursal].astype(str) == boca_sel]
         if meses_sel: df_filtrado = df_filtrado[df_filtrado['Mes_Período'].isin(meses_sel)]
@@ -726,6 +731,51 @@ if not df_ventas_raw.empty:
                     return ''
                     
                 st.dataframe(df_tabla_nps_t.style.map(color_clasificacion_t, subset=['Clasificación']), use_container_width=True, hide_index=True)
+                
+                # --- NUEVA SECCIÓN: INDICADORES DE SCORING ---
+                st.write("---")
+                st.write("### 📈 Indicadores de Scoring (TPA)")
+                
+                # Filtramos para tener solo los valores válidos de Scoring usando la columna procesada 'Scoring_Clean'
+                df_scoring = df_t_filt[df_t_filt['Scoring_Clean'].isin(['ok', 'pendiente', 'caido', 'caído', 'caida'])].copy()
+                
+                total_scoring = len(df_scoring)
+                cant_ok = len(df_scoring[df_scoring['Scoring_Clean'] == 'ok'])
+                cant_pend = len(df_scoring[df_scoring['Scoring_Clean'] == 'pendiente'])
+                cant_caido = len(df_scoring[df_scoring['Scoring_Clean'].isin(['caido', 'caído', 'caida'])])
+                
+                pct_ok = (cant_ok / total_scoring * 100) if total_scoring > 0 else 0
+                
+                sc1, sc2, sc3, sc4, sc5 = st.columns(5)
+                sc1.metric("Total Evaluados", total_scoring)
+                sc2.metric("✅ OK", cant_ok)
+                sc3.metric("⏳ Pendientes", cant_pend)
+                sc4.metric("❌ Caídos", cant_caido)
+                sc5.metric("🎯 % de OK", f"{pct_ok:.1f}%")
+                
+                st.write("#### ⚠️ Detalle de Operaciones Pendientes y Caídas")
+                df_alertas_scoring = df_scoring[df_scoring['Scoring_Clean'].isin(['pendiente', 'caido', 'caído', 'caida'])].copy()
+                
+                if not df_alertas_scoring.empty:
+                    cols_to_show = [col_vend_t, col_suc_t, col_cliente_t, 'Mes_Filtro', col_scoring_t]
+                    df_alertas_show = df_alertas_scoring[cols_to_show].rename(columns={
+                        col_vend_t: 'Vendedor',
+                        col_suc_t: 'Sucursal',
+                        col_cliente_t: 'Cliente',
+                        'Mes_Filtro': 'Mes',
+                        col_scoring_t: 'Estado Scoring'
+                    })
+                    
+                    def color_scoring(val):
+                        v = str(val).lower()
+                        if 'caid' in v: return 'color: #e74c3c; font-weight: bold;'
+                        if 'pend' in v: return 'color: #f1c40f; font-weight: bold;'
+                        return ''
+                        
+                    st.dataframe(df_alertas_show.style.map(color_scoring, subset=['Estado Scoring']), use_container_width=True, hide_index=True)
+                else:
+                    st.success("🎉 ¡Excelente! No hay operaciones pendientes ni caídas en el período seleccionado.")
+
             else:
                 st.warning("No hay datos válidos para calcular el NPS en el período seleccionado.")
         else:
