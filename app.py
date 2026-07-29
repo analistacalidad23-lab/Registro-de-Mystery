@@ -213,9 +213,7 @@ if not df_ventas_raw.empty:
             df_tpa26_proc['Mes_Filtro'] = df_tpa26_proc['Mes_Num'].map(meses_es_t26).fillna(df_tpa26_proc[col_mes_t26].astype(str))
             
             df_tpa26_proc = df_tpa26_proc.sort_values('Mes_Num')
-            
             df_tpa26_proc['Etapa_Filtro'] = df_tpa26_proc[col_etapa_t26].astype(str).str.strip().str.capitalize()
-            
             df_tpa26_proc['Nota_Num'] = pd.to_numeric(df_tpa26_proc[col_nota_t26], errors='coerce')
             df_tpa26_proc['Estado_NPS'] = df_tpa26_proc['Nota_Num'].apply(obtener_estado_nps)
             df_tpa26_proc['Comentario_Cliente'] = df_tpa26_proc[col_coment_t26].fillna("Sin comentarios")
@@ -228,7 +226,7 @@ if not df_ventas_raw.empty:
         "🚗 Usados Certificados",
         "📘 Plan de Ahorro (TPA)",
         "📈 Encuestas de Marca (TPA26)",
-        "📋 Criterios de Puntaje DEP"
+        "📋 Criterios de puntaje DEP"
     ])
 
     # --- PESTAÑA 1: VENTA CONVENCIONAL 0KM ---
@@ -527,7 +525,10 @@ if not df_ventas_raw.empty:
         
         if not df_usados_raw.empty:
             columnas_u = df_usados_raw.columns.tolist()
-            col_nps_u = columnas_u[-1]
+            
+            # ---> CORRECCIÓN EXPLÍCITA: Columna Q (Índice 16 = columna 17 en orden alfabético A..Q) <---
+            col_nps_u = columnas_u[16] if len(columnas_u) > 16 else columnas_u[-1]
+            
             col_ssi_u = next((c for c in columnas_u if 'ssi' in c.lower()), columnas_u[0])
             col_fecha_u = "Mes" if "Mes" in columnas_u else columnas_u[2]
             top_5_cols = columnas_u[5:10] if len(columnas_u) >= 10 else []
@@ -547,6 +548,7 @@ if not df_ventas_raw.empty:
             for c in top_5_cols:
                 df_u_filt[c] = pd.to_numeric(df_u_filt[c].astype(str).str.replace(',', '.').str.replace('%', ''), errors='coerce')
                 
+            # Calculamos NPS explícitamente sobre la columna Q y eliminamos vacíos/nulos
             df_u_filt['Estado_NPS'] = df_u_filt[col_nps_u].apply(obtener_estado_nps)
             df_u_filt['Comentario_Cliente'] = df_u_filt[col_comentario_uct].fillna("Sin comentarios")
                 
@@ -554,7 +556,10 @@ if not df_ventas_raw.empty:
             OBJ_NPS_UCT = 89.0
             
             ssi_uct_actual = df_u_filt['SSI_Num'].mean()
-            nps_uct_actual = calcular_nps(df_u_filt[col_nps_u])
+            
+            # Cálculo de NPS puramente matemático ignorando vacíos y 'Sin Dato'
+            df_u_valid_nps = df_u_filt[df_u_filt['Estado_NPS'].isin(['Promotor', 'Neutro', 'Detractor'])]
+            nps_uct_actual = calcular_nps_texto(df_u_valid_nps['Estado_NPS']) if len(df_u_valid_nps) > 0 else calcular_nps(df_u_filt[col_nps_u])
             
             st.write("#### ⏱️ Estado Actual vs Objetivos UCT")
             cu1, cu2 = st.columns(2)
@@ -566,7 +571,10 @@ if not df_ventas_raw.empty:
                 df_u_mensual = df_u_filt.groupby('Mes_Filtro', sort=False)
                 res_u = []
                 for mes, grupo in df_u_mensual:
-                    fila = {'Mes': mes, 'Q encuestas': len(grupo), 'SSI UCT': grupo['SSI_Num'].mean(), 'NPS UCT': calcular_nps(grupo[col_nps_u])}
+                    grp_valid = grupo[grupo['Estado_NPS'].isin(['Promotor', 'Neutro', 'Detractor'])]
+                    nps_mes = calcular_nps_texto(grp_valid['Estado_NPS']) if len(grp_valid) > 0 else np.nan
+                    
+                    fila = {'Mes': mes, 'Q encuestas': len(grupo), 'SSI UCT': grupo['SSI_Num'].mean(), 'NPS UCT': nps_mes}
                     for c in top_5_cols: fila[c] = grupo[c].mean()
                     res_u.append(fila)
                     
@@ -693,7 +701,6 @@ if not df_ventas_raw.empty:
             OBJETIVO_NPS_TPA = 85.0
             nps_tpa_actual = calcular_nps_texto(df_nps_valid_t['Estado_NPS'])
             
-            # 1. Global (Arriba de todo)
             st.write("#### ⏱️ Estado Actual vs Objetivo TPA (Global)")
             ct1, ct2 = st.columns(2)
             with ct1:
