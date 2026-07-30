@@ -218,18 +218,18 @@ if not df_ventas_raw.empty:
             df_tpa26_proc['Estado_NPS'] = df_tpa26_proc['Nota_Num'].apply(obtener_estado_nps)
             df_tpa26_proc['Comentario_Cliente'] = df_tpa26_proc[col_coment_t26].fillna("Sin comentarios")
 
-    # 5. Creación de Pestañas
+    # 5. Creación de Pestañas con los nuevos títulos solicitados
     tab_convencional, tab_ranking, tab_comisiones, tab_usados, tab_tpa, tab_tpa26, tab_criterios = st.tabs([
-        "📊 Venta Convencional 0km", 
-        "🏆 Ranking Vendedores", 
-        "💰 Comisiones",
-        "🚗 Usados Certificados",
-        "📘 Plan de Ahorro (TPA)",
-        "📈 Encuestas de Marca (TPA26)",
-        "📋 Criterios de puntaje DEP"
+        "Venta Convencional 0km - TASA", 
+        "Ranking de vendedores 0km – (TASA)", 
+        "Comisiones (0KM & TPA)",
+        "Usados Certificados – (TASA)",
+        "Plan de Ahorro (Interno)",
+        "Plan de Ahorro (TASA)",
+        "Criterios de puntaje DEP"
     ])
 
-    # --- PESTAÑA 1: VENTA CONVENCIONAL 0KM ---
+    # --- PESTAÑA 1: VENTA CONVENCIONAL 0KM - TASA ---
     with tab_convencional:
         st.markdown('<div class="sticky-filters">', unsafe_allow_html=True)
         st.write("#### 🔍 Filtros de Visualización (0km)")
@@ -357,7 +357,7 @@ if not df_ventas_raw.empty:
                 
             st.dataframe(df_tabla_nps.style.map(color_clasificacion, subset=['Clasificación']), use_container_width=True, hide_index=True)
 
-    # --- PESTAÑA 2: RANKING 0KM ---
+    # --- PESTAÑA 2: RANKING DE VENDEDORES 0KM – (TASA) ---
     with tab_ranking:
         st.markdown('<div class="sticky-filters">', unsafe_allow_html=True)
         st.write("#### 🔍 Filtros de Ranking (0km)")
@@ -413,7 +413,7 @@ if not df_ventas_raw.empty:
             )
             st.plotly_chart(fig_ranking, use_container_width=True)
 
-    # --- PESTAÑA 3: COMISIONES (0KM Y TPA) ---
+    # --- PESTAÑA 3: COMISIONES (0KM & TPA) ---
     with tab_comisiones:
         st.markdown('<div class="sticky-filters">', unsafe_allow_html=True)
         st.write("#### 🔍 Filtros de Liquidación (Comisiones)")
@@ -506,7 +506,7 @@ if not df_ventas_raw.empty:
         else:
             st.warning("No se pudo cargar la hoja de TPA. Verifica que el enlace sea correcto.")
 
-    # --- PESTAÑA 4: USADOS CERTIFICADOS (UCT) ---
+    # --- PESTAÑA 4: USADOS CERTIFICADOS – (TASA) ---
     with tab_usados:
         st.markdown('<div class="sticky-filters">', unsafe_allow_html=True)
         st.write("#### 🔍 Filtros de Período y Sucursal (UCT)")
@@ -525,10 +525,7 @@ if not df_ventas_raw.empty:
         
         if not df_usados_raw.empty:
             columnas_u = df_usados_raw.columns.tolist()
-            
-            # ---> CORRECCIÓN EXPLÍCITA: Columna Q (Índice 16 = columna 17 en orden alfabético A..Q) <---
             col_nps_u = columnas_u[16] if len(columnas_u) > 16 else columnas_u[-1]
-            
             col_ssi_u = next((c for c in columnas_u if 'ssi' in c.lower()), columnas_u[0])
             col_fecha_u = "Mes" if "Mes" in columnas_u else columnas_u[2]
             top_5_cols = columnas_u[5:10] if len(columnas_u) >= 10 else []
@@ -548,7 +545,6 @@ if not df_ventas_raw.empty:
             for c in top_5_cols:
                 df_u_filt[c] = pd.to_numeric(df_u_filt[c].astype(str).str.replace(',', '.').str.replace('%', ''), errors='coerce')
                 
-            # Calculamos NPS explícitamente sobre la columna Q y eliminamos vacíos/nulos
             df_u_filt['Estado_NPS'] = df_u_filt[col_nps_u].apply(obtener_estado_nps)
             df_u_filt['Comentario_Cliente'] = df_u_filt[col_comentario_uct].fillna("Sin comentarios")
                 
@@ -556,8 +552,6 @@ if not df_ventas_raw.empty:
             OBJ_NPS_UCT = 89.0
             
             ssi_uct_actual = df_u_filt['SSI_Num'].mean()
-            
-            # Cálculo de NPS puramente matemático ignorando vacíos y 'Sin Dato'
             df_u_valid_nps = df_u_filt[df_u_filt['Estado_NPS'].isin(['Promotor', 'Neutro', 'Detractor'])]
             nps_uct_actual = calcular_nps_texto(df_u_valid_nps['Estado_NPS']) if len(df_u_valid_nps) > 0 else calcular_nps(df_u_filt[col_nps_u])
             
@@ -673,7 +667,7 @@ if not df_ventas_raw.empty:
         else:
             st.warning("No se pudo cargar la hoja USADO26. Verifica que la URL o el nombre de la hoja sean correctos.")
 
-    # --- PESTAÑA 5: PLAN DE AHORRO (TPA) ---
+    # --- PESTAÑA 5: PLAN DE AHORRO (INTERNO) ---
     with tab_tpa:
         st.markdown('<div class="sticky-filters">', unsafe_allow_html=True)
         st.write("#### 🔍 Filtros de Período y Sucursal (TPA)")
@@ -695,7 +689,6 @@ if not df_ventas_raw.empty:
             if boca_sel_t: df_t_filt = df_t_filt[df_t_filt[col_suc_t].astype(str).isin(boca_sel_t)]
             
             df_t_filt['Comentario_Cliente'] = df_t_filt[col_coment_t].fillna("Sin comentarios")
-            
             df_nps_valid_t = df_t_filt[df_t_filt['Estado_NPS'].isin(['Promotor', 'Neutro', 'Detractor'])].copy()
             
             OBJETIVO_NPS_TPA = 85.0
@@ -835,7 +828,7 @@ if not df_ventas_raw.empty:
         else:
             st.warning("No se pudo cargar la hoja de TPA. Verifica que el enlace sea correcto.")
 
-    # --- PESTAÑA 6: ENCUESTAS DE MARCA (TPA26) ---
+    # --- PESTAÑA 6: PLAN DE AHORRO (TASA) ---
     with tab_tpa26:
         st.markdown('<div class="sticky-filters">', unsafe_allow_html=True)
         st.write("#### 🔍 Filtros de Período y Etapa (TPA26 - Toyota)")
@@ -933,7 +926,7 @@ if not df_ventas_raw.empty:
         else:
             st.warning("No se pudo cargar la hoja TPA26. Verifica que existan las columnas indicadas.")
 
-    # --- PESTAÑA 7: CRITERIOS DE ASIGNACIÓN DE PUNTAJE ---
+    # --- PESTAÑA 7: CRITERIOS DE PUNTAJE DEP ---
     with tab_criterios:
         st.write("### 📋 Criterios de puntaje DEP")
         st.write("Resumen de las métricas, puntajes máximos otorgados y porcentajes de alcance para objetivos y comisiones.")
