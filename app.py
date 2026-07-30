@@ -229,7 +229,7 @@ if not df_ventas_raw.empty:
         "Criterios de puntaje DEP"
     ])
 
-    # --- PESTAÑA 1: VENTA CONVENCIONAL 0KM - (TASA) ---
+    # --- PESTAÑA 1: VENTA CONVENCIONAL 0KM - TASA ---
     with tab_convencional:
         st.markdown('<div class="sticky-filters">', unsafe_allow_html=True)
         st.write("#### 🔍 Filtros de Visualización (0km)")
