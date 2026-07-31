@@ -49,7 +49,23 @@ URL_TPA26 = f"https://docs.google.com/spreadsheets/d/{SHEET_ID_VENTAS}/gviz/tq?t
 
 SHEET_ID_TPA = "1-kBeBdC60rBwsV-rUTlVLSnr2kkI4eJzvW0mA_IvtBg"
 URL_TPA = f"https://docs.google.com/spreadsheets/d/{SHEET_ID_TPA}/gviz/tq?tqx=out:csv&sheet=Base%20Datos%20Actualizada"
+# --- AGREGAR DEBAJO DE LAS OTRAS URLS DE GOOGLE SHEETS ---
+URL_PADRON = f"https://docs.google.com/spreadsheets/d/{SHEET_ID_VENTAS}/gviz/tq?tqx=out:csv&sheet=PADRON" 
+# (Nota: Si la pestaña en tu Excel se llama de otra forma como "VENDEDORES", cámbialo en sheet=...)
 
+# Cargar el dataframe del padrón junto con los otros dataframes
+df_padron_raw = cargar_datos(URL_PADRON)
+
+# --- FUNCIÓN PARA NORMALIZAR NOMBRES Y FACILITAR EL CRUCE ---
+import unicodedata
+
+def normalizar_nombre(nombre):
+    if pd.isna(nombre) or str(nombre).strip() == "":
+        return ""
+    # Convertir a minúsculas, quitar tildes y espacios en los extremos
+    texto = str(nombre).lower().strip()
+    texto = unicodedata.normalize('NFKD', texto).encode('ASCII', 'ignore').decode('utf-8')
+    return texto
 @st.cache_data(ttl=60)
 def cargar_datos(url):
     try:
@@ -413,10 +429,10 @@ if not df_ventas_raw.empty:
             )
             st.plotly_chart(fig_ranking, use_container_width=True)
 
-    # --- PESTAÑA 3: COMISIONES (0KM & TPA) ---
+   # --- PESTAÑA 3: COMISIONES (0KM & TPA) ---
     with tab_comisiones:
         st.markdown('<div class="sticky-filters">', unsafe_allow_html=True)
-        st.write("#### 🔍 Filtros de Liquidación (Comisiones)")
+        st.write("#### 🔍 Filtros de Liquidación (Comisiones Maestra)")
         f_com1, f_com2, f_com3, f_com4 = st.columns(4)
         with f_com1:
             meses_sel_com_0km = st.multiselect("Meses (0km):", meses_disp_0km, default=meses_disp_0km, key="f_mes_com_0km")
@@ -430,39 +446,58 @@ if not df_ventas_raw.empty:
                 boca_sel_tpa_com = st.multiselect("Sucursal (TPA):", bocas_disp_tpa_com, default=bocas_disp_tpa_com, key="f_boca_com_tpa")
         st.markdown('</div>', unsafe_allow_html=True)
 
-        st.write("### 💰 Tabla de Cálculo de Comisiones SSI (0km)")
-        if not col_atencion_vend: st.error("No se detectó la columna '02 Atencion Vendedor' en los datos.")
-        else:
-            df_com_0km_filt = df_procesado.copy()
-            if meses_sel_com_0km:
-                df_com_0km_filt = df_com_0km_filt[df_com_0km_filt['Mes_Período'].isin(meses_sel_com_0km)]
-            if boca_sel_com_0km != "Todas":
-                df_com_0km_filt = df_com_0km_filt[df_com_0km_filt[col_sucursal].astype(str) == boca_sel_com_0km]
-
-            datos_comision = []
-            for vend, grupo in df_com_0km_filt.groupby(col_vendedor):
-                cant_encuestas, ssi_promedio, atencion_promedio = len(grupo), grupo['SSI_Num'].mean(), grupo[col_atencion_vend].mean()
-                if pd.isna(atencion_promedio) or cant_encuestas == 0: comision = 0.00
-                elif atencion_promedio*10 < 95.5: comision = -0.05
-                else: comision = 0.01
-                datos_comision.append({
-                    'Vendedor': vend, 'Cantidad de Encuestas': cant_encuestas,
-                    'Atención del Vendedor (x10)': (atencion_promedio * 10 if pd.notna(atencion_promedio) else np.nan),
-                    'SSI Promedio': ssi_promedio, 'Comisión SSI': comision
-                })
-            df_comisiones = pd.DataFrame(datos_comision)
-            if not df_comisiones.empty:
-                df_comisiones = df_comisiones.sort_values('Atención del Vendedor (x10)', ascending=False)
-                st.dataframe(
-                    df_comisiones.style.format({'Atención del Vendedor (x10)': '{:.1f}', 'SSI Promedio': '{:.1f}', 'Comisión SSI': '{:.2f}'})
-                    .map(lambda val: 'color: #e74c3c; font-weight: bold;' if val == -0.05 else ('color: #2ecc71; font-weight: bold;' if val == 0.01 else 'color: #7f8c8d;'), subset=['Comisión SSI']),
-                    use_container_width=True, hide_index=True
-                )
-            else: st.warning("Datos insuficientes para el cálculo de comisiones de 0km en el período y sucursal seleccionados.")
-
-        st.markdown("---")
-        st.write("### 💰 Tabla de Cálculo de Comisiones NPS (Toyota Plan de Ahorro)")
+        st.write("### 💰 Reporte Maestro Integrado de Comisiones (0km & TPA)")
         
+        # 1. PREPARAR EL PADRÓN BASE
+        if not df_padron_raw.empty:
+            df_padron = df_padron_raw.copy()
+            # Asumimos que las columnas se llaman exactamente: Canal, Provincia, Vendedor, CUIL
+            # Ajustar nombres de columnas si en el sheet tienen algún espacio extra
+            cols_padron = df_padron.columns.tolist()
+            col_p_canal = next((c for c in cols_padron if 'canal' in c.lower()), cols_padron[0])
+            col_p_prov = next((c for c in cols_padron if 'provincia' in c.lower() or 'sucursal' in c.lower()), cols_padron[1])
+            col_p_vend = next((c for c in cols_padron if 'vendedor' in c.lower() or 'nombre' in c.lower()), cols_padron[2])
+            col_p_cuil = next((c for c in cols_padron if 'cuil' in c.lower() or 'cuit' in c.lower()), cols_padron[3])
+            
+            df_padron['key_vend'] = df_padron[col_p_vend].apply(normalizar_nombre)
+        else:
+            # Si el padrón falla al cargar, creamos uno temporal a partir de los vendedores de 0km
+            st.warning("⚠️ No se pudo cargar la hoja PADRON. Se generará el reporte solo con vendedores activos en encuestas.")
+            vends_unicos = df_procesado[col_vendedor].dropna().unique()
+            df_padron = pd.DataFrame({col_vendedor: vends_unicos})
+            col_p_canal, col_p_prov, col_p_vend, col_p_cuil = "Canal", "Provincia", col_vendedor, "CUIL"
+            df_padron[col_p_canal] = "-"
+            df_padron[col_p_prov] = "-"
+            df_padron[col_p_cuil] = "-"
+            df_padron['key_vend'] = df_padron[col_p_vend].apply(normalizar_nombre)
+
+        # 2. CALCULAR COMISIONES 0KM
+        df_com_0km_filt = df_procesado.copy()
+        if meses_sel_com_0km:
+            df_com_0km_filt = df_com_0km_filt[df_com_0km_filt['Mes_Período'].isin(meses_sel_com_0km)]
+        if boca_sel_com_0km != "Todas":
+            df_com_0km_filt = df_com_0km_filt[df_com_0km_filt[col_sucursal].astype(str) == boca_sel_com_0km]
+
+        datos_0km = []
+        for vend, grupo in df_com_0km_filt.groupby(col_vendedor):
+            cant_enc = len(grupo)
+            ssi_prom = grupo['SSI_Num'].mean()
+            atenc_prom = grupo[col_atencion_vend].mean() if col_atencion_vend else np.nan
+            
+            if pd.isna(atenc_prom) or cant_enc == 0: com_0km = 0.00
+            elif atenc_prom*10 < 95.5: com_0km = -0.05
+            else: com_0km = 0.01
+            
+            datos_0km.append({
+                'key_vend': normalizar_nombre(vend),
+                'Encuestas 0km': cant_enc,
+                'SSI 0km': round(ssi_prom, 1) if pd.notna(ssi_prom) else "-",
+                'Comisión 0km': com_0km
+            })
+        df_res_0km = pd.DataFrame(datos_0km)
+
+        # 3. CALCULAR COMISIONES TPA
+        datos_tpa = []
         if df_t_proc is not None:
             df_tpa_comision = df_t_proc.copy()
             if meses_sel_tpa_com: 
@@ -472,40 +507,85 @@ if not df_ventas_raw.empty:
                 
             df_nps_valid_com = df_tpa_comision[df_tpa_comision['Estado_NPS'].isin(['Promotor', 'Neutro', 'Detractor'])]
             
-            datos_comision_tpa = []
             for vend, grupo in df_nps_valid_com.groupby(col_vend_t):
-                cant_encuestas = len(grupo)
-                if cant_encuestas == 0: continue
+                cant_enc = len(grupo)
+                if cant_enc == 0: continue
+                nps_vend = calcular_nps_texto(grupo['Estado_NPS'])
                 
-                nps_vendedor = calcular_nps_texto(grupo['Estado_NPS'])
-                
-                comision = 0.00
-                if pd.notna(nps_vendedor):
-                    if nps_vendedor >= 85.0:
-                        comision = 0.01
-                    else:
-                        comision = -0.05
-                        
-                datos_comision_tpa.append({
-                    'Vendedor': vend,
-                    'Cantidad de Encuestas': cant_encuestas,
-                    'NPS Promedio': nps_vendedor,
-                    'Comisión TPA': comision
+                if pd.notna(nps_vend):
+                    com_tpa = 0.01 if nps_vend >= 85.0 else -0.05
+                else:
+                    com_tpa = 0.00
+                    
+                datos_tpa.append({
+                    'key_vend': normalizar_nombre(vend),
+                    'Encuestas TPA': cant_enc,
+                    'NPS TPA': f"{nps_vend:.1f}%" if pd.notna(nps_vend) else "-",
+                    'Comisión TPA': com_tpa
                 })
-                
-            df_comisiones_tpa = pd.DataFrame(datos_comision_tpa)
-            if not df_comisiones_tpa.empty:
-                df_comisiones_tpa = df_comisiones_tpa.sort_values('NPS Promedio', ascending=False)
-                st.dataframe(
-                    df_comisiones_tpa.style.format({'NPS Promedio': '{:.1f}%', 'Comisión TPA': '{:.2f}'})
-                    .map(lambda val: 'color: #e74c3c; font-weight: bold;' if val == -0.05 else ('color: #2ecc71; font-weight: bold;' if val == 0.01 else 'color: #7f8c8d;'), subset=['Comisión TPA']),
-                    use_container_width=True, hide_index=True
-                )
-            else:
-                st.warning("No hay encuestas válidas de TPA en el período y sucursal seleccionados para calcular comisiones.")
-        else:
-            st.warning("No se pudo cargar la hoja de TPA. Verifica que el enlace sea correcto.")
+        df_res_tpa = pd.DataFrame(datos_tpa)
 
+        # 4. UNIFICACIÓN (MERGE EN TABLA MAESTRA)
+        df_maestra = df_padron.copy()
+        
+        if not df_res_0km.empty:
+            df_maestra = pd.merge(df_maestra, df_res_0km, on='key_vend', how='left')
+        else:
+            df_maestra['Encuestas 0km'] = "-"
+            df_maestra['SSI 0km'] = "-"
+            df_maestra['Comisión 0km'] = "-"
+
+        if not df_res_tpa.empty:
+            df_maestra = pd.merge(df_maestra, df_res_tpa, on='key_vend', how='left')
+        else:
+            df_maestra['Encuestas TPA'] = "-"
+            df_maestra['NPS TPA'] = "-"
+            df_maestra['Comisión TPA'] = "-"
+
+        # 5. FORMATO Y LIMPIEZA DE VACÍOS / GUIONES
+        columnas_finales = [col_p_canal, col_p_prov, col_p_vend, col_p_cuil, 
+                            'Encuestas 0km', 'SSI 0km', 'Comisión 0km', 
+                            'Encuestas TPA', 'NPS TPA', 'Comisión TPA']
+        
+        df_tabla_reporte = df_maestra[columnas_finales].copy()
+        df_tabla_reporte = df_tabla_reporte.rename(columns={
+            col_p_canal: 'Canal', col_p_prov: 'Provincia', 
+            col_p_vend: 'Vendedor', col_p_cuil: 'CUIL'
+        })
+
+        # Reemplazar NaNs por "-"
+        df_tabla_reporte['Encuestas 0km'] = df_tabla_reporte['Encuestas 0km'].fillna("-")
+        df_tabla_reporte['SSI 0km'] = df_tabla_reporte['SSI 0km'].fillna("-")
+        df_tabla_reporte['Comisión 0km'] = df_tabla_reporte['Comisión 0km'].fillna("-")
+        df_tabla_reporte['Encuestas TPA'] = df_tabla_reporte['Encuestas TPA'].fillna("-")
+        df_tabla_reporte['NPS TPA'] = df_tabla_reporte['NPS TPA'].fillna("-")
+        df_tabla_reporte['Comisión TPA'] = df_tabla_reporte['Comisión TPA'].fillna("-")
+
+        # 6. MOSTRAR TABLA CON COLORES CONDICIONALES
+        def colorear_comision(val):
+            if val == 0.01:
+                return 'color: #2ecc71; font-weight: bold;'
+            elif val == -0.05:
+                return 'color: #e74c3c; font-weight: bold;'
+            return 'color: #7f8c8d;'
+
+        st.dataframe(
+            df_tabla_reporte.style
+            .map(colorear_comision, subset=['Comisión 0km', 'Comisión TPA']),
+            use_container_width=True,
+            hide_index=True
+        )
+
+        # 7. BOTÓN PARA DESCARGAR EN EXCEL / CSV
+        st.write("---")
+        csv_export = df_tabla_reporte.to_csv(index=False).encode('utf-8-sig')
+        st.download_button(
+            label="📥 Descargar Reporte Maestro de Comisiones (Excel / CSV)",
+            data=csv_export,
+            file_name="reporte_maestro_comisiones.csv",
+            mime="text/csv",
+            help="Descargue esta tabla para abrirla en Excel o convertirla a PDF."
+        )
     # --- PESTAÑA 4: USADOS CERTIFICADOS – (TASA) ---
     with tab_usados:
         st.markdown('<div class="sticky-filters">', unsafe_allow_html=True)
