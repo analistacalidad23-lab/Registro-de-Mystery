@@ -667,7 +667,7 @@ if not df_ventas_raw.empty:
         else:
             st.warning("No se pudo cargar la hoja USADO26. Verifica que la URL o el nombre de la hoja sean correctos.")
 
-    # --- PESTAÑA 5: PLAN DE AHORRO (INTERNO) ---
+   # --- PESTAÑA 5: PLAN DE AHORRO (TPA) ---
     with tab_tpa:
         st.markdown('<div class="sticky-filters">', unsafe_allow_html=True)
         st.write("#### 🔍 Filtros de Período y Sucursal (TPA)")
@@ -689,11 +689,13 @@ if not df_ventas_raw.empty:
             if boca_sel_t: df_t_filt = df_t_filt[df_t_filt[col_suc_t].astype(str).isin(boca_sel_t)]
             
             df_t_filt['Comentario_Cliente'] = df_t_filt[col_coment_t].fillna("Sin comentarios")
+            
             df_nps_valid_t = df_t_filt[df_t_filt['Estado_NPS'].isin(['Promotor', 'Neutro', 'Detractor'])].copy()
             
             OBJETIVO_NPS_TPA = 85.0
             nps_tpa_actual = calcular_nps_texto(df_nps_valid_t['Estado_NPS'])
             
+            # 1. Global (Arriba de todo)
             st.write("#### ⏱️ Estado Actual vs Objetivo TPA (Global)")
             ct1, ct2 = st.columns(2)
             with ct1:
@@ -827,7 +829,6 @@ if not df_ventas_raw.empty:
 
         else:
             st.warning("No se pudo cargar la hoja de TPA. Verifica que el enlace sea correcto.")
-
     # --- PESTAÑA 6: PLAN DE AHORRO (TASA) ---
     with tab_tpa26:
         st.markdown('<div class="sticky-filters">', unsafe_allow_html=True)
