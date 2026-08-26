@@ -234,7 +234,6 @@ if not df_ventas_raw.empty:
         df_mystery_proc[col_m_proy] = df_mystery_proc[col_m_proy].astype(str).str.strip()
         df_mystery_proc[col_m_pdv] = df_mystery_proc[col_m_pdv].astype(str).str.strip()
         
-        # Limpiar el % o comas para volverlo numérico
         df_mystery_proc['Resultado_Num'] = pd.to_numeric(
             df_mystery_proc[col_m_res].astype(str).str.replace(',', '.').str.replace('%', ''), 
             errors='coerce'
@@ -659,7 +658,6 @@ if not df_ventas_raw.empty:
                     # Gráfico de torta centrado (sin columnas)
                     pie_u1, pie_u2, pie_u3 = st.columns([1, 2, 1])
                     
-                    # --- 1. GRÁFICO GLOBAL DE TORA (UCT) ---
                     conteo_global_uct = df_nps_valid_u['Estado_NPS'].value_counts().reset_index()
                     conteo_global_uct.columns = ['Estado', 'Cantidad']
                     fig_pie_uct = px.pie(
@@ -1018,11 +1016,6 @@ if not df_ventas_raw.empty:
                 fig_mys.update_traces(textposition='outside')
                 st.plotly_chart(fig_mys, use_container_width=True)
 
-                st.markdown("---")
-                st.write("#### 📋 Detalle de Evaluaciones (Mystery)")
-                
-                cols_display = [c for c in df_mystery_raw.columns.tolist() if c not in ['Resultado_Num']]
-                st.dataframe(df_m_filt[cols_display], use_container_width=True, hide_index=True)
             else:
                 st.warning("No hay datos para los filtros seleccionados.")
         else:
