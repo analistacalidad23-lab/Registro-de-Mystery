@@ -32,7 +32,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown('<div class="main-title">🎯 Tablero de Gestión: Calidad, NPS y Comisiones</div>', unsafe_allow_html=True)
-st.markdown('<div class="subtitle">Seguimiento de Satisfacción y Lealtad del Cliente: 0km, Usados Certificados y TPA</div>', unsafe_allow_html=True)
+st.markdown('<div class="subtitle">Seguimiento de Satisfacción y Lealtad del Cliente: 0km, Usados Certificados, TPA y Mystery</div>', unsafe_allow_html=True)
 
 # --- BOTÓN DE ACTUALIZACIÓN MANUAL EN BARRA LATERAL ---
 st.sidebar.header("🔄 Sincronización")
@@ -46,6 +46,7 @@ SHEET_ID_VENTAS = "1PGoOlFTN2WuuiEqRk0KPrcLZL6pEcFVeNWo35shsUSA"
 URL_VENTAS = f"https://docs.google.com/spreadsheets/d/{SHEET_ID_VENTAS}/gviz/tq?tqx=out:csv&sheet=VENTAS26"
 URL_USADOS = f"https://docs.google.com/spreadsheets/d/{SHEET_ID_VENTAS}/gviz/tq?tqx=out:csv&sheet=USADO26"
 URL_TPA26 = f"https://docs.google.com/spreadsheets/d/{SHEET_ID_VENTAS}/gviz/tq?tqx=out:csv&sheet=TPA26"
+URL_MYSTERY = f"https://docs.google.com/spreadsheets/d/{SHEET_ID_VENTAS}/gviz/tq?tqx=out:csv&sheet=Mystery26"
 
 SHEET_ID_TPA = "1-kBeBdC60rBwsV-rUTlVLSnr2kkI4eJzvW0mA_IvtBg"
 URL_TPA = f"https://docs.google.com/spreadsheets/d/{SHEET_ID_TPA}/gviz/tq?tqx=out:csv&sheet=Base%20Datos%20Actualizada"
@@ -120,6 +121,7 @@ df_ventas_raw = cargar_datos(URL_VENTAS)
 df_usados_raw = cargar_datos(URL_USADOS)
 df_tpa_raw = cargar_datos(URL_TPA)
 df_tpa26_raw = cargar_datos(URL_TPA26)
+df_mystery_raw = cargar_datos(URL_MYSTERY)
 
 if not df_ventas_raw.empty:
     columnas_disponibles = df_ventas_raw.columns.tolist()
@@ -218,14 +220,15 @@ if not df_ventas_raw.empty:
             df_tpa26_proc['Estado_NPS'] = df_tpa26_proc['Nota_Num'].apply(obtener_estado_nps)
             df_tpa26_proc['Comentario_Cliente'] = df_tpa26_proc[col_coment_t26].fillna("Sin comentarios")
 
-    # 5. Creación de Pestañas con los nuevos títulos solicitados
-    tab_convencional, tab_ranking, tab_comisiones, tab_usados, tab_tpa, tab_tpa26, tab_criterios = st.tabs([
+    # 5. Creación de Pestañas
+    tab_convencional, tab_ranking, tab_comisiones, tab_usados, tab_tpa, tab_tpa26, tab_mystery, tab_criterios = st.tabs([
         "Venta Convencional 0km - TASA", 
         "Ranking de vendedores 0km – (TASA)", 
         "Comisiones (0KM & TPA)",
         "Usados Certificados – (TASA)",
         "Plan de Ahorro (Interno)",
         "Plan de Ahorro (TASA)",
+        "Mystery Shopper",
         "Criterios de puntaje DEP"
     ])
 
@@ -789,11 +792,11 @@ if not df_ventas_raw.empty:
                     pct_ok = (cant_ok / total_scoring * 100) if total_scoring > 0 else 0
                     
                     sc1, sc2, sc3, sc4, sc5 = st.columns(5)
-                    sc1.metric("Total", total_scoring)
+                    sc1.metric("Total Evaluados", total_scoring)
                     sc2.metric("✅ OK", cant_ok)
-                    sc3.metric("⏳ Pend.", cant_pend)
+                    sc3.metric("⏳ Pendientes", cant_pend)
                     sc4.metric("❌ Caídos", cant_caido)
-                    sc5.metric("🎯 % OK", f"{pct_ok:.1f}%")
+                    sc5.metric("🎯 % de OK", f"{pct_ok:.1f}%")
 
                 with col_score_search:
                     busqueda_query = st.text_input("🔍 Buscar Vendedor / Cliente:", placeholder="Escriba aquí...", key="search_tpa_box")
@@ -948,7 +951,88 @@ if not df_ventas_raw.empty:
         else:
             st.warning("No se pudo cargar la hoja TPA26. Verifica que existan las columnas indicadas.")
 
-    # --- PESTAÑA 7: CRITERIOS DE PUNTAJE DEP ---
+    # --- PESTAÑA 7: MYSTERY SHOPPER ---
+    with tab_mystery:
+        st.markdown('<div class="sticky-filters">', unsafe_allow_html=True)
+        st.write("#### 🔍 Filtros de Visualización (Mystery Shopper)")
+        
+        if not df_mystery_raw.empty:
+            df_myst = df_mystery_raw.copy()
+            
+            # Identificación dinámica de columnas solicitadas
+            cols_myst = df_myst.columns.tolist()
+            col_proyecto = next((c for c in cols_myst if 'proyecto' in c.lower()), None)
+            col_pdv = next((c for c in cols_myst if 'punto de venta' in c.lower() or 'sucursal' in c.lower()), None)
+            
+            # Buscamos "resultado de auditoria" omitiendo posibles tildes o variaciones
+            col_resultado = next((c for c in cols_myst if 'resultado' in c.lower() and 'auditor' in c.lower()), None)
+            if not col_resultado:
+                col_resultado = next((c for c in cols_myst if 'resultado' in c.lower()), None)
+
+            if col_proyecto and col_pdv and col_resultado:
+                # Limpiar y convertir a formato numérico la columna de resultados
+                df_myst['Resultado_Num'] = pd.to_numeric(
+                    df_myst[col_resultado].astype(str).str.replace(',', '.').str.replace('%', ''), 
+                    errors='coerce'
+                )
+                
+                f_m1, f_m2 = st.columns(2)
+                with f_m1:
+                    proyectos_disp = sorted(df_myst[col_proyecto].dropna().astype(str).unique().tolist())
+                    proyecto_sel = st.multiselect("Seleccionar Tipo de Mystery (Proyecto):", proyectos_disp, default=proyectos_disp, key="f_myst_proy")
+                with f_m2:
+                    pdv_disp = sorted(df_myst[col_pdv].dropna().astype(str).unique().tolist())
+                    pdv_sel = st.multiselect("Seleccionar Punto de Venta:", pdv_disp, default=pdv_disp, key="f_myst_pdv")
+                st.markdown('</div>', unsafe_allow_html=True)
+                
+                # Aplicar Filtros
+                df_myst_filt = df_myst.copy()
+                if proyecto_sel:
+                    df_myst_filt = df_myst_filt[df_myst_filt[col_proyecto].astype(str).isin(proyecto_sel)]
+                if pdv_sel:
+                    df_myst_filt = df_myst_filt[df_myst_filt[col_pdv].astype(str).isin(pdv_sel)]
+                    
+                st.write("### 🕵️‍♂️ Resultados de Auditoría (Mystery Shopper)")
+                
+                if not df_myst_filt.empty:
+                    # Agrupar datos para graficar promedios si hay más de 1 auditoría del mismo tipo
+                    df_myst_agrupado = df_myst_filt.groupby([col_pdv, col_proyecto])['Resultado_Num'].mean().reset_index()
+                    
+                    fig_myst = px.bar(
+                        df_myst_agrupado, 
+                        x=col_pdv, 
+                        y='Resultado_Num', 
+                        color=col_proyecto,
+                        barmode='group',
+                        text='Resultado_Num',
+                        title='Promedio de Resultado de Auditoría por Punto de Venta y Proyecto',
+                        labels={col_pdv: 'Punto de Venta', 'Resultado_Num': 'Resultado Promedio (%)', col_proyecto: 'Tipo de Mystery'},
+                        color_discrete_sequence=px.colors.qualitative.Set1
+                    )
+                    
+                    fig_myst.update_traces(texttemplate='<b>%{text:.1f}%</b>', textposition='outside')
+                    fig_myst.update_layout(
+                        paper_bgcolor="rgba(0,0,0,0)", 
+                        plot_bgcolor="rgba(0,0,0,0)", 
+                        font=dict(color='white'),
+                        yaxis=dict(range=[0, max(100, df_myst_agrupado['Resultado_Num'].max() * 1.2)], zeroline=False),
+                        xaxis=dict(showgrid=False),
+                        margin=dict(t=50, b=50)
+                    )
+                    st.plotly_chart(fig_myst, use_container_width=True)
+                    
+                    st.write("#### 📋 Detalle de Evaluaciones")
+                    columnas_mostrar_myst = [c for c in cols_myst if c in [col_proyecto, col_pdv, col_resultado]]
+                    df_mostrar_myst = df_myst_filt[columnas_mostrar_myst].copy()
+                    st.dataframe(df_mostrar_myst.style.format(na_rep="-"), use_container_width=True, hide_index=True)
+                else:
+                    st.warning("No hay datos para los filtros seleccionados.")
+            else:
+                st.error("No se encontraron las columnas 'Proyecto', 'Punto de venta' o 'Resultado de auditoria' en la hoja Mystery26. Revise los encabezados.")
+        else:
+            st.warning("No se pudo cargar la hoja Mystery26. Verifica que existan los datos o que el nombre de la hoja sea correcto.")
+
+    # --- PESTAÑA 8: CRITERIOS DE PUNTAJE DEP ---
     with tab_criterios:
         st.write("### 📋 Criterios de puntaje DEP")
         st.write("Resumen de las métricas, puntajes máximos otorgados y porcentajes de alcance para objetivos y comisiones.")
