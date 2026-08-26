@@ -218,7 +218,7 @@ if not df_ventas_raw.empty:
             df_tpa26_proc['Estado_NPS'] = df_tpa26_proc['Nota_Num'].apply(obtener_estado_nps)
             df_tpa26_proc['Comentario_Cliente'] = df_tpa26_proc[col_coment_t26].fillna("Sin comentarios")
 
-    # 5. Creación de Pestañas
+    # 5. Creación de Pestañas con los nuevos títulos solicitados
     tab_convencional, tab_ranking, tab_comisiones, tab_usados, tab_tpa, tab_tpa26, tab_criterios = st.tabs([
         "Venta Convencional 0km - TASA", 
         "Ranking de vendedores 0km – (TASA)", 
@@ -325,6 +325,7 @@ if not df_ventas_raw.empty:
             
             pie_col1, pie_col2 = st.columns(2)
             
+            # --- 1. GRÁFICO GLOBAL DE TORA (0km) ---
             conteo_global_0km = df_nps_valid['Estado_NPS'].value_counts().reset_index()
             conteo_global_0km.columns = ['Estado', 'Cantidad']
             fig_pie_0km = px.pie(
@@ -334,6 +335,7 @@ if not df_ventas_raw.empty:
             fig_pie_0km.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(color='white'))
             pie_col1.plotly_chart(fig_pie_0km, use_container_width=True)
             
+            # --- 2. GRÁFICO POR SUCURSAL EN BARRAS (0km) ---
             df_suc_bar_0km = df_nps_valid.groupby([col_sucursal, 'Estado_NPS']).size().reset_index(name='Cantidad')
             fig_bar_suc_0km = px.bar(
                 df_suc_bar_0km, x=col_sucursal, y='Cantidad', color='Estado_NPS',
@@ -387,7 +389,6 @@ if not df_ventas_raw.empty:
             resumen.append({'Vendedor': vend, 'Encuestas': len(grupo), 'SSI_Promedio': grupo['SSI_Num'].mean(), 'NPS': calcular_nps(grupo[col_nps])})
             
         df_resumen = pd.DataFrame(resumen).dropna(subset=['SSI_Promedio'])
-        # ORDENAR DE MAYOR A MENOR POR CANTIDAD DE ENCUESTAS (Ascending=True para que en Plotly salga el mayor arriba)
         df_resumen = df_resumen.sort_values(by=['Encuestas', 'SSI_Promedio'], ascending=[True, True])
         
         if not df_resumen.empty:
@@ -634,8 +635,10 @@ if not df_ventas_raw.empty:
                     
                     df_nps_valid_u = df_u_filt[df_u_filt['Estado_NPS'] != 'Sin Dato']
                     
-                    pie_u1, pie_u2 = st.columns(2)
+                    # Gráfico de torta centrado (sin columnas)
+                    pie_u1, pie_u2, pie_u3 = st.columns([1, 2, 1])
                     
+                    # --- 1. GRÁFICO GLOBAL DE TORA (UCT) ---
                     conteo_global_uct = df_nps_valid_u['Estado_NPS'].value_counts().reset_index()
                     conteo_global_uct.columns = ['Estado', 'Cantidad']
                     fig_pie_uct = px.pie(
@@ -643,16 +646,7 @@ if not df_ventas_raw.empty:
                         color='Estado', color_discrete_map={'Promotor': '#2ecc71', 'Neutro': '#f1c40f', 'Detractor': '#e74c3c'}, hole=0.4
                     )
                     fig_pie_uct.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(color='white'))
-                    pie_u1.plotly_chart(fig_pie_uct, use_container_width=True)
-                    
-                    df_tipo_bar_uct = df_nps_valid_u.groupby([col_vendedor_u, 'Estado_NPS']).size().reset_index(name='Cantidad')
-                    fig_bar_tipo_uct = px.bar(
-                        df_tipo_bar_uct, x=col_vendedor_u, y='Cantidad', color='Estado_NPS',
-                        title='Distribución de NPS por Asesor / Tipo', barmode='stack',
-                        color_discrete_map={'Promotor': '#2ecc71', 'Neutro': '#f1c40f', 'Detractor': '#e74c3c'}
-                    )
-                    fig_bar_tipo_uct.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(color='white'), xaxis_title="Asesor / Vendedor", yaxis_title="Cantidad")
-                    pie_u2.plotly_chart(fig_bar_tipo_uct, use_container_width=True)
+                    pie_u2.plotly_chart(fig_pie_uct, use_container_width=True)
                     
                     st.write("#### 📋 Registro Detallado de Clientes con Comentarios (UCT)")
                     columnas_tabla_u = [col_cliente_u, col_sucursal_u, col_vendedor_u, 'Mes_Filtro', 'Estado_NPS', col_nps_u]
