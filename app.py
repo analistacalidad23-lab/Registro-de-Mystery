@@ -46,7 +46,6 @@ SHEET_ID_VENTAS = "1PGoOlFTN2WuuiEqRk0KPrcLZL6pEcFVeNWo35shsUSA"
 URL_VENTAS = f"https://docs.google.com/spreadsheets/d/{SHEET_ID_VENTAS}/gviz/tq?tqx=out:csv&sheet=VENTAS26"
 URL_USADOS = f"https://docs.google.com/spreadsheets/d/{SHEET_ID_VENTAS}/gviz/tq?tqx=out:csv&sheet=USADO26"
 URL_TPA26 = f"https://docs.google.com/spreadsheets/d/{SHEET_ID_VENTAS}/gviz/tq?tqx=out:csv&sheet=TPA26"
-URL_MYSTERY = f"https://docs.google.com/spreadsheets/d/{SHEET_ID_VENTAS}/gviz/tq?tqx=out:csv&sheet=Mystery26"
 
 SHEET_ID_TPA = "1-kBeBdC60rBwsV-rUTlVLSnr2kkI4eJzvW0mA_IvtBg"
 URL_TPA = f"https://docs.google.com/spreadsheets/d/{SHEET_ID_TPA}/gviz/tq?tqx=out:csv&sheet=Base%20Datos%20Actualizada"
@@ -121,7 +120,6 @@ df_ventas_raw = cargar_datos(URL_VENTAS)
 df_usados_raw = cargar_datos(URL_USADOS)
 df_tpa_raw = cargar_datos(URL_TPA)
 df_tpa26_raw = cargar_datos(URL_TPA26)
-df_mystery_raw = cargar_datos(URL_MYSTERY)
 
 if not df_ventas_raw.empty:
     columnas_disponibles = df_ventas_raw.columns.tolist()
@@ -220,34 +218,14 @@ if not df_ventas_raw.empty:
             df_tpa26_proc['Estado_NPS'] = df_tpa26_proc['Nota_Num'].apply(obtener_estado_nps)
             df_tpa26_proc['Comentario_Cliente'] = df_tpa26_proc[col_coment_t26].fillna("Sin comentarios")
 
-    # ---------------------------------------------------------
-    # PROCESAMIENTO GLOBAL MYSTERY26
-    # ---------------------------------------------------------
-    df_mystery_proc = None
-    if not df_mystery_raw.empty:
-        cols_mys = df_mystery_raw.columns.tolist()
-        col_m_proy = next((c for c in cols_mys if 'proyecto' in c.lower()), cols_mys[0])
-        col_m_pdv = next((c for c in cols_mys if 'punto' in c.lower() or 'venta' in c.lower() or 'sucursal' in c.lower()), cols_mys[1])
-        col_m_res = next((c for c in cols_mys if 'resultado' in c.lower() or 'auditoria' in c.lower()), cols_mys[2])
-        
-        df_mystery_proc = df_mystery_raw.copy()
-        df_mystery_proc[col_m_proy] = df_mystery_proc[col_m_proy].astype(str).str.strip()
-        df_mystery_proc[col_m_pdv] = df_mystery_proc[col_m_pdv].astype(str).str.strip()
-        
-        df_mystery_proc['Resultado_Num'] = pd.to_numeric(
-            df_mystery_proc[col_m_res].astype(str).str.replace(',', '.').str.replace('%', ''), 
-            errors='coerce'
-        )
-
-    # 5. Creación de Pestañas con los nuevos títulos solicitados + Mystery
-    tab_convencional, tab_ranking, tab_comisiones, tab_usados, tab_tpa, tab_tpa26, tab_mystery, tab_criterios = st.tabs([
+    # 5. Creación de Pestañas con los nuevos títulos solicitados
+    tab_convencional, tab_ranking, tab_comisiones, tab_usados, tab_tpa, tab_tpa26, tab_criterios = st.tabs([
         "Venta Convencional 0km - TASA", 
         "Ranking de vendedores 0km – (TASA)", 
         "Comisiones (0KM & TPA)",
         "Usados Certificados – (TASA)",
         "Plan de Ahorro (Interno)",
         "Plan de Ahorro (TASA)",
-        "🕵️ Mystery Shopper",
         "Criterios de puntaje DEP"
     ])
 
@@ -347,6 +325,7 @@ if not df_ventas_raw.empty:
             
             pie_col1, pie_col2 = st.columns(2)
             
+            # --- 1. GRÁFICO GLOBAL DE TORA (0km) ---
             conteo_global_0km = df_nps_valid['Estado_NPS'].value_counts().reset_index()
             conteo_global_0km.columns = ['Estado', 'Cantidad']
             fig_pie_0km = px.pie(
@@ -356,6 +335,7 @@ if not df_ventas_raw.empty:
             fig_pie_0km.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(color='white'))
             pie_col1.plotly_chart(fig_pie_0km, use_container_width=True)
             
+            # --- 2. GRÁFICO POR SUCURSAL EN BARRAS (0km) ---
             df_suc_bar_0km = df_nps_valid.groupby([col_sucursal, 'Estado_NPS']).size().reset_index(name='Cantidad')
             fig_bar_suc_0km = px.bar(
                 df_suc_bar_0km, x=col_sucursal, y='Cantidad', color='Estado_NPS',
@@ -658,6 +638,7 @@ if not df_ventas_raw.empty:
                     # Gráfico de torta centrado (sin columnas)
                     pie_u1, pie_u2, pie_u3 = st.columns([1, 2, 1])
                     
+                    # --- 1. GRÁFICO GLOBAL DE TORA (UCT) ---
                     conteo_global_uct = df_nps_valid_u['Estado_NPS'].value_counts().reset_index()
                     conteo_global_uct.columns = ['Estado', 'Cantidad']
                     fig_pie_uct = px.pie(
@@ -967,61 +948,7 @@ if not df_ventas_raw.empty:
         else:
             st.warning("No se pudo cargar la hoja TPA26. Verifica que existan las columnas indicadas.")
 
-    # --- PESTAÑA 7: MYSTERY SHOPPER ---
-    with tab_mystery:
-        st.markdown('<div class="sticky-filters">', unsafe_allow_html=True)
-        st.write("#### 🔍 Filtros de Mystery Shopper")
-        fm_1, fm_2 = st.columns(2)
-        
-        if df_mystery_proc is not None:
-            proyectos_disp = [p for p in df_mystery_proc[col_m_proy].unique() if str(p).lower() != 'nan']
-            pdv_disp = [p for p in df_mystery_proc[col_m_pdv].unique() if str(p).lower() != 'nan']
-            
-            with fm_1:
-                proy_sel = st.multiselect("Filtrar por Proyecto (Tipo):", sorted(proyectos_disp), default=sorted(proyectos_disp), key="f_proy_mys")
-            with fm_2:
-                pdv_sel = st.multiselect("Filtrar por Sucursal (Punto de Venta):", sorted(pdv_disp), default=sorted(pdv_disp), key="f_pdv_mys")
-            st.markdown('</div>', unsafe_allow_html=True)
-
-            df_m_filt = df_mystery_proc.copy()
-            if proy_sel: df_m_filt = df_m_filt[df_m_filt[col_m_proy].isin(proy_sel)]
-            if pdv_sel: df_m_filt = df_m_filt[df_m_filt[col_m_pdv].isin(pdv_sel)]
-
-            st.write("### 🕵️ Resultados de Auditoría (Mystery Shopper)")
-            
-            if not df_m_filt.empty:
-                df_m_grp = df_m_filt.groupby([col_m_pdv, col_m_proy])['Resultado_Num'].mean().reset_index()
-                
-                fig_mys = px.bar(
-                    df_m_grp, 
-                    x=col_m_pdv, 
-                    y='Resultado_Num', 
-                    color=col_m_proy,
-                    barmode='group',
-                    title="Resultado de Auditoría por Sucursal y Tipo de Mystery",
-                    labels={col_m_pdv: 'Punto de Venta (Sucursal)', 'Resultado_Num': 'Puntaje Promedio (%)', col_m_proy: 'Proyecto'},
-                    text=df_m_grp['Resultado_Num'].apply(lambda x: f"{x:.1f}%" if pd.notna(x) else "")
-                )
-                
-                y_max_m = max(100, df_m_grp['Resultado_Num'].max() + 10 if not pd.isna(df_m_grp['Resultado_Num'].max()) else 100)
-                
-                fig_mys.update_layout(
-                    paper_bgcolor="rgba(0,0,0,0)", 
-                    plot_bgcolor="rgba(0,0,0,0)", 
-                    font=dict(color='white'),
-                    yaxis=dict(range=[0, y_max_m]),
-                    xaxis_title="",
-                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-                )
-                fig_mys.update_traces(textposition='outside')
-                st.plotly_chart(fig_mys, use_container_width=True)
-
-            else:
-                st.warning("No hay datos para los filtros seleccionados.")
-        else:
-            st.warning("No se pudo cargar la hoja Mystery26. Verifica que la pestaña exista y tenga las columnas 'Proyecto', 'Punto de venta' y 'Resultado de auditoria'.")
-
-    # --- PESTAÑA 8: CRITERIOS DE PUNTAJE DEP ---
+    # --- PESTAÑA 7: CRITERIOS DE PUNTAJE DEP ---
     with tab_criterios:
         st.write("### 📋 Criterios de puntaje DEP")
         st.write("Resumen de las métricas, puntajes máximos otorgados y porcentajes de alcance para objetivos y comisiones.")
