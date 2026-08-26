@@ -218,7 +218,7 @@ if not df_ventas_raw.empty:
             df_tpa26_proc['Estado_NPS'] = df_tpa26_proc['Nota_Num'].apply(obtener_estado_nps)
             df_tpa26_proc['Comentario_Cliente'] = df_tpa26_proc[col_coment_t26].fillna("Sin comentarios")
 
-    # 5. Creación de Pestañas con los nuevos títulos solicitados
+    # 5. Creación de Pestañas
     tab_convencional, tab_ranking, tab_comisiones, tab_usados, tab_tpa, tab_tpa26, tab_criterios = st.tabs([
         "Venta Convencional 0km - TASA", 
         "Ranking de vendedores 0km – (TASA)", 
@@ -325,7 +325,6 @@ if not df_ventas_raw.empty:
             
             pie_col1, pie_col2 = st.columns(2)
             
-            # --- 1. GRÁFICO GLOBAL DE TORA (0km) ---
             conteo_global_0km = df_nps_valid['Estado_NPS'].value_counts().reset_index()
             conteo_global_0km.columns = ['Estado', 'Cantidad']
             fig_pie_0km = px.pie(
@@ -335,7 +334,6 @@ if not df_ventas_raw.empty:
             fig_pie_0km.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(color='white'))
             pie_col1.plotly_chart(fig_pie_0km, use_container_width=True)
             
-            # --- 2. GRÁFICO POR SUCURSAL EN BARRAS (0km) ---
             df_suc_bar_0km = df_nps_valid.groupby([col_sucursal, 'Estado_NPS']).size().reset_index(name='Cantidad')
             fig_bar_suc_0km = px.bar(
                 df_suc_bar_0km, x=col_sucursal, y='Cantidad', color='Estado_NPS',
@@ -356,7 +354,6 @@ if not df_ventas_raw.empty:
                 'Estado_NPS': 'Clasificación', col_nps: 'Nota NPS'
             })
             
-            # Desplegables organizados por sucursal
             sucursales_0km_unicas = df_tabla_nps['Sucursal'].unique()
             for suc_iter in sucursales_0km_unicas:
                 with st.expander(f"📥 Ver clientes detallados - Sucursal {suc_iter}"):
@@ -390,7 +387,8 @@ if not df_ventas_raw.empty:
             resumen.append({'Vendedor': vend, 'Encuestas': len(grupo), 'SSI_Promedio': grupo['SSI_Num'].mean(), 'NPS': calcular_nps(grupo[col_nps])})
             
         df_resumen = pd.DataFrame(resumen).dropna(subset=['SSI_Promedio'])
-        df_resumen = df_resumen.sort_values('SSI_Promedio', ascending=True)
+        # ORDENAR DE MAYOR A MENOR POR CANTIDAD DE ENCUESTAS (Ascending=True para que en Plotly salga el mayor arriba)
+        df_resumen = df_resumen.sort_values(by=['Encuestas', 'SSI_Promedio'], ascending=[True, True])
         
         if not df_resumen.empty:
             fig_ranking = go.Figure()
@@ -453,7 +451,7 @@ if not df_ventas_raw.empty:
             for vend, grupo in df_com_0km_filt.groupby(col_vendedor):
                 cant_encuestas, ssi_promedio, atencion_promedio = len(grupo), grupo['SSI_Num'].mean(), grupo[col_atencion_vend].mean()
                 if pd.isna(atencion_promedio) or cant_encuestas == 0: comision = 0.00
-                elif atencion_promedio < 95.6: comision = -0.05
+                elif atencion_promedio*10 < 95.5: comision = -0.05
                 else: comision = 0.01
                 datos_comision.append({
                     'Vendedor': vend, 'Cantidad de Encuestas': cant_encuestas,
@@ -638,7 +636,6 @@ if not df_ventas_raw.empty:
                     
                     pie_u1, pie_u2 = st.columns(2)
                     
-                    # --- 1. GRÁFICO GLOBAL DE TORA (UCT) ---
                     conteo_global_uct = df_nps_valid_u['Estado_NPS'].value_counts().reset_index()
                     conteo_global_uct.columns = ['Estado', 'Cantidad']
                     fig_pie_uct = px.pie(
@@ -648,7 +645,6 @@ if not df_ventas_raw.empty:
                     fig_pie_uct.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(color='white'))
                     pie_u1.plotly_chart(fig_pie_uct, use_container_width=True)
                     
-                    # --- 2. GRÁFICO POR TIPO DE CLIENTE EN BARRAS (UCT) ---
                     df_tipo_bar_uct = df_nps_valid_u.groupby([col_vendedor_u, 'Estado_NPS']).size().reset_index(name='Cantidad')
                     fig_bar_tipo_uct = px.bar(
                         df_tipo_bar_uct, x=col_vendedor_u, y='Cantidad', color='Estado_NPS',
@@ -669,7 +665,6 @@ if not df_ventas_raw.empty:
                         'Estado_NPS': 'Clasificación', col_nps_u: 'Nota NPS'
                     })
                     
-                    # Desplegables organizados por sucursal
                     sucursales_uct_unicas = df_tabla_nps_u['Sucursal'].unique()
                     for suc_iter in sucursales_uct_unicas:
                         with st.expander(f"📥 Ver clientes detallados - Sucursal {suc_iter}"):
@@ -800,11 +795,11 @@ if not df_ventas_raw.empty:
                     pct_ok = (cant_ok / total_scoring * 100) if total_scoring > 0 else 0
                     
                     sc1, sc2, sc3, sc4, sc5 = st.columns(5)
-                    sc1.metric("Total Evaluados", total_scoring)
+                    sc1.metric("Total", total_scoring)
                     sc2.metric("✅ OK", cant_ok)
-                    sc3.metric("⏳ Pendientes", cant_pend)
+                    sc3.metric("⏳ Pend.", cant_pend)
                     sc4.metric("❌ Caídos", cant_caido)
-                    sc5.metric("🎯 % de OK", f"{pct_ok:.1f}%")
+                    sc5.metric("🎯 % OK", f"{pct_ok:.1f}%")
 
                 with col_score_search:
                     busqueda_query = st.text_input("🔍 Buscar Vendedor / Cliente:", placeholder="Escriba aquí...", key="search_tpa_box")
