@@ -14,22 +14,35 @@ st.set_page_config(
 
 st.markdown("""
     <style>
-    /* Estilos adaptados al Modo Claro nativo de Streamlit */
-    .main-title { font-size: 28px; font-weight: bold; color: #1f77b4; margin-bottom: 5px; border-bottom: 2px solid #1f77b4; padding-bottom: 5px;}
-    .subtitle { font-size: 15px; color: #555555; margin-bottom: 25px; font-weight: 500;}
+    /* Fondo general de la aplicación */
+    .stApp {
+        background-color: #F4F6F9;
+    }
     
-    /* Panel superior de filtros (estilo tarjeta clara) */
+    /* Títulos con gris oscuro/negro suave */
+    .main-title { font-size: 28px; font-weight: bold; color: #333333; margin-bottom: 5px; border-bottom: 2px solid #A4C5D6; padding-bottom: 5px;}
+    .subtitle { font-size: 14px; color: #666666; margin-bottom: 25px; font-weight: 500;}
+    
+    /* Panel superior de filtros estilo Tarjeta con borde celeste */
     .sticky-filters {
         position: sticky;
         top: 0px;
         z-index: 999;
-        background-color: #ffffff;
-        padding: 15px 15px;
-        border: 1px solid #e6e6e6;
+        background-color: #FFFFFF;
+        padding: 15px 20px;
+        border: 1px solid #A4C5D6;
         margin-bottom: 20px;
-        border-radius: 6px;
-        box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.05);
+        border-radius: 8px;
+        box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.05);
     }
+
+    /* Forzar contraste en textos nativos */
+    h1, h2, h3, h4, p, span, label {
+        color: #333333 !important;
+    }
+    
+    /* Estilo para pestañas */
+    .stTabs [data-baseweb="tab"] { color: #428bca; font-weight: 600; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -103,7 +116,7 @@ def calcular_nps_texto(serie_estado):
     if total_validos == 0: return np.nan
     return (promotores - detractores) / total_validos * 100.0
 
-def crear_reloj(valor, titulo, objetivo, max_val, color_ok="#2ecc71", color_bad="#e74c3c"):
+def crear_reloj(valor, titulo, objetivo, max_val, color_ok="#428bca", color_bad="#e74c3c"):
     valor = 0 if pd.isna(valor) else valor
     color_actual = color_ok if valor >= objetivo else color_bad
     fig = go.Figure(go.Indicator(
@@ -114,10 +127,10 @@ def crear_reloj(valor, titulo, objetivo, max_val, color_ok="#2ecc71", color_bad=
         gauge={'axis': {'range': [-100 if "NPS" in titulo else 0, max_val], 'tickwidth': 1, 'tickcolor': '#333333'}, 
                'bar': {'color': color_actual},
                'bgcolor': "white",
-               'borderwidth': 1,
-               'bordercolor': "#cccccc",
-               'steps': [{'range': [-100 if "NPS" in titulo else 0, objetivo], 'color': 'rgba(0,0,0,0.05)'}, 
-                         {'range': [objetivo, max_val], 'color': 'rgba(0,0,0,0.1)'}],
+               'borderwidth': 1.5,
+               'bordercolor': "#A4C5D6",
+               'steps': [{'range': [-100 if "NPS" in titulo else 0, objetivo], 'color': 'rgba(0,0,0,0.03)'}, 
+                         {'range': [objetivo, max_val], 'color': 'rgba(66, 139, 202, 0.08)'}],
                'threshold': {'line': {'color': "#333333", 'width': 3}, 'thickness': 0.75, 'value': objetivo}}
     ))
     fig.update_layout(height=280, margin=dict(l=10, r=10, t=40, b=10), paper_bgcolor="rgba(0,0,0,0)", font={'color': "#333333"})
@@ -282,25 +295,34 @@ if not df_ventas_raw.empty:
         if not df_tabla_mensual.empty:
             fig_evolucion = go.Figure()
             
+            # Barras sutiles para volumen
             fig_evolucion.add_trace(go.Bar(
                 x=df_tabla_mensual['Mes'], y=df_tabla_mensual['Q encuestas'], 
-                name='Cant. Encuestas', marker_color='rgba(169, 169, 169, 0.4)', 
+                name='Cant. Encuestas', marker_color='rgba(200, 210, 220, 0.6)', 
                 yaxis='y2', text=df_tabla_mensual['Q encuestas'].apply(lambda x: f"<b>{x}</b>"), textposition='auto',
                 textfont=dict(color='#333333', size=12)
             ))
+            # Línea con Relleno (Area Chart) para SSI, color Azul/Celeste Corporativo
             fig_evolucion.add_trace(go.Scatter(
                 x=df_tabla_mensual['Mes'], y=df_tabla_mensual['SSI Puro'], 
-                mode='lines+markers+text', name='SSI Puro', line=dict(color='#1f77b4', width=3), 
+                mode='lines+markers+text', name='SSI Puro', 
+                line=dict(color='#428bca', width=3), 
+                fill='tozeroy', fillcolor='rgba(66, 139, 202, 0.15)',
                 text=df_tabla_mensual['SSI Puro'].apply(lambda x: f"<b>{x:.1f}</b>"), textposition='top center',
                 textfont=dict(color='#333333', size=12)
             ))
+            # Línea sola para NPS
             fig_evolucion.add_trace(go.Scatter(
                 x=df_tabla_mensual['Mes'], y=df_tabla_mensual['NPS dealer'], 
-                mode='lines+markers+text', name='NPS dealer', line=dict(color='#2ecc71', width=3), 
+                mode='lines+markers+text', name='NPS dealer', line=dict(color='#2C3E50', width=3), 
                 text=df_tabla_mensual['NPS dealer'].apply(lambda x: f"<b>{x:.1f}%</b>" if pd.notna(x) else ""), textposition='bottom center',
                 textfont=dict(color='#333333', size=12)
             ))
             
+            # Líneas rojas de objetivo
+            fig_evolucion.add_hline(y=OBJETIVO_SSI, line_dash="dash", line_color="#E3000F", annotation_text="Obj. SSI", annotation_position="top right", annotation_font_color="#E3000F")
+            fig_evolucion.add_hline(y=OBJETIVO_NPS, line_dash="dot", line_color="#E3000F", annotation_text="Obj. NPS", annotation_position="bottom right", annotation_font_color="#E3000F")
+
             y2_max = max(10, df_tabla_mensual['Q encuestas'].max() * 1.5)
             y2_min = - (100 / 110) * y2_max
             
@@ -308,9 +330,9 @@ if not df_ventas_raw.empty:
                 title=dict(text="Evolución de SSI, NPS y Volumen de Encuestas", font=dict(color='#333333', size=20)),
                 yaxis=dict(title=dict(text="Puntaje / Porcentaje", font=dict(color='#333333')), range=[-100, 110], zeroline=True, zerolinecolor='#cccccc', zerolinewidth=2, tickfont=dict(color='#333333'), showgrid=True, gridcolor='#e6e6e6'),
                 yaxis2=dict(title=dict(text="Cantidad de Encuestas", font=dict(color='#333333')), overlaying='y', side='right', range=[y2_min, y2_max], showgrid=False, zeroline=False, tickfont=dict(color='#333333')),
-                xaxis=dict(tickfont=dict(color='#333333')),
+                xaxis=dict(tickfont=dict(color='#333333'), showgrid=False),
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color='#333333')),
-                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                paper_bgcolor="white", plot_bgcolor="white",
                 margin=dict(t=80, b=40, l=40, r=40)
             )
             st.plotly_chart(fig_evolucion, use_container_width=True)
@@ -342,9 +364,9 @@ if not df_ventas_raw.empty:
             conteo_global_0km.columns = ['Estado', 'Cantidad']
             fig_pie_0km = px.pie(
                 conteo_global_0km, names='Estado', values='Cantidad', title='Distribución General de NPS',
-                color='Estado', color_discrete_map={'Promotor': '#2ecc71', 'Neutro': '#f1c40f', 'Detractor': '#e74c3c'}, hole=0.4
+                color='Estado', color_discrete_map={'Promotor': '#428bca', 'Neutro': '#d3d3d3', 'Detractor': '#e74c3c'}, hole=0.4
             )
-            fig_pie_0km.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(color='#333333'), title=dict(font=dict(size=18)))
+            fig_pie_0km.update_layout(paper_bgcolor="white", plot_bgcolor="white", font=dict(color='#333333'), title=dict(font=dict(size=18)))
             pie_col1.plotly_chart(fig_pie_0km, use_container_width=True)
             
             # --- 2. GRÁFICO POR SUCURSAL EN BARRAS (0km) ---
@@ -352,13 +374,13 @@ if not df_ventas_raw.empty:
             fig_bar_suc_0km = px.bar(
                 df_suc_bar_0km, x=col_sucursal, y='Cantidad', color='Estado_NPS',
                 title='Distribución de NPS por Sucursal', barmode='stack',
-                color_discrete_map={'Promotor': '#2ecc71', 'Neutro': '#f1c40f', 'Detractor': '#e74c3c'}
+                color_discrete_map={'Promotor': '#428bca', 'Neutro': '#d3d3d3', 'Detractor': '#e74c3c'}
             )
             fig_bar_suc_0km.update_layout(
-                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", 
+                paper_bgcolor="white", plot_bgcolor="white", 
                 font=dict(color='#333333'), 
-                xaxis=dict(title=dict(text="Sucursal")), 
-                yaxis=dict(title=dict(text="Cantidad")), 
+                xaxis=dict(title=dict(text="Sucursal"), tickfont=dict(color="#333333")), 
+                yaxis=dict(title=dict(text="Cantidad"), tickfont=dict(color="#333333")), 
                 title=dict(font=dict(size=18))
             )
             pie_col2.plotly_chart(fig_bar_suc_0km, use_container_width=True)
@@ -416,7 +438,7 @@ if not df_ventas_raw.empty:
                 y=df_resumen['Vendedor'], 
                 x=df_resumen['Encuestas'], 
                 name='Cant. Encuestas', 
-                marker_color='#1f77b4', 
+                marker_color='#428bca', 
                 orientation='h',
                 text=df_resumen.apply(
                     lambda r: f"   <b>{int(r['Encuestas'])}</b> encuestas   |   <b>SSI:</b> {r['SSI_Promedio']:.1f}   |   <b>NPS:</b> {r['NPS']:.1f}%" if pd.notna(r['NPS']) else f"   <b>{int(r['Encuestas'])}</b> encuestas   |   <b>SSI:</b> {r['SSI_Promedio']:.1f}   |   <b>NPS:</b> N/D", 
@@ -434,7 +456,7 @@ if not df_ventas_raw.empty:
             fig_ranking.update_layout(
                 xaxis=dict(title=dict(text="Volumen de Encuestas", font=dict(color='#333333')), range=[0, x_max_rank], showgrid=True, gridcolor='#e6e6e6', tickfont=dict(color='#333333')), 
                 yaxis=dict(title=dict(text="Vendedor", font=dict(color='#333333')), tickfont=dict(color='#333333')),
-                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                paper_bgcolor="white", plot_bgcolor="white",
                 height=altura_dinamica,
                 margin=dict(l=150, r=50, t=40, b=40)
             )
@@ -482,7 +504,7 @@ if not df_ventas_raw.empty:
                 df_comisiones = df_comisiones.sort_values('Atención del Vendedor (x10)', ascending=False)
                 st.dataframe(
                     df_comisiones.style.format({'Atención del Vendedor (x10)': '{:.1f}', 'SSI Promedio': '{:.1f}', 'Comisión SSI': '{:.2f}'})
-                    .map(lambda val: 'color: #e74c3c; font-weight: bold;' if val == -0.05 else ('color: #2ecc71; font-weight: bold;' if val == 0.01 else 'color: #7f8c8d;'), subset=['Comisión SSI']),
+                    .map(lambda val: 'color: #e74c3c; font-weight: bold;' if val == -0.05 else ('color: #428bca; font-weight: bold;' if val == 0.01 else 'color: #7f8c8d;'), subset=['Comisión SSI']),
                     use_container_width=True, hide_index=True
                 )
             else: st.warning("Datos insuficientes para el cálculo de comisiones de 0km en el período y sucursal seleccionados.")
@@ -525,7 +547,7 @@ if not df_ventas_raw.empty:
                 df_comisiones_tpa = df_comisiones_tpa.sort_values('NPS Promedio', ascending=False)
                 st.dataframe(
                     df_comisiones_tpa.style.format({'NPS Promedio': '{:.1f}%', 'Comisión TPA': '{:.2f}'})
-                    .map(lambda val: 'color: #e74c3c; font-weight: bold;' if val == -0.05 else ('color: #2ecc71; font-weight: bold;' if val == 0.01 else 'color: #7f8c8d;'), subset=['Comisión TPA']),
+                    .map(lambda val: 'color: #e74c3c; font-weight: bold;' if val == -0.05 else ('color: #428bca; font-weight: bold;' if val == 0.01 else 'color: #7f8c8d;'), subset=['Comisión TPA']),
                     use_container_width=True, hide_index=True
                 )
             else:
@@ -610,17 +632,21 @@ if not df_ventas_raw.empty:
                     ))
                     fig_evo_u.add_trace(go.Scatter(
                         x=df_res_u['Mes'], y=df_res_u['SSI UCT'], 
-                        mode='lines+markers+text', name='SSI UCT', line=dict(color='#1f77b4', width=3), 
+                        mode='lines+markers+text', name='SSI UCT', line=dict(color='#428bca', width=3), 
+                        fill='tozeroy', fillcolor='rgba(66, 139, 202, 0.15)',
                         text=df_res_u['SSI UCT'].apply(lambda x: f"<b>{x:.1f}</b>"), textposition='top center',
                         textfont=dict(color='#333333', size=12)
                     ))
                     fig_evo_u.add_trace(go.Scatter(
                         x=df_res_u['Mes'], y=df_res_u['NPS UCT'], 
-                        mode='lines+markers+text', name='NPS UCT', line=dict(color='#2ecc71', width=3), 
+                        mode='lines+markers+text', name='NPS UCT', line=dict(color='#2C3E50', width=3), 
                         text=df_res_u['NPS UCT'].apply(lambda x: f"<b>{x:.1f}%</b>" if pd.notna(x) else ""), textposition='bottom center',
                         textfont=dict(color='#333333', size=12)
                     ))
                     
+                    fig_evo_u.add_hline(y=OBJ_SSI_UCT, line_dash="dash", line_color="#E3000F", annotation_text="Obj. SSI", annotation_position="top right", annotation_font_color="#E3000F")
+                    fig_evo_u.add_hline(y=OBJ_NPS_UCT, line_dash="dot", line_color="#E3000F", annotation_text="Obj. NPS", annotation_position="bottom right", annotation_font_color="#E3000F")
+
                     y2_max_u = max(10, df_res_u['Q encuestas'].max() * 1.5)
                     y2_min_u = - (100 / 110) * y2_max_u
 
@@ -628,9 +654,9 @@ if not df_ventas_raw.empty:
                         title=dict(text="Evolución de SSI, NPS y Volumen de Encuestas (UCT)", font=dict(color='#333333', size=20)),
                         yaxis=dict(title=dict(text="Puntaje / Porcentaje", font=dict(color='#333333')), range=[-100, 110], zeroline=True, zerolinecolor='#cccccc', zerolinewidth=2, tickfont=dict(color='#333333'), showgrid=True, gridcolor='#e6e6e6'),
                         yaxis2=dict(title=dict(text="Cantidad de Encuestas", font=dict(color='#333333')), overlaying='y', side='right', range=[y2_min_u, y2_max_u], showgrid=False, zeroline=False, tickfont=dict(color='#333333')),
-                        xaxis=dict(tickfont=dict(color='#333333')),
+                        xaxis=dict(tickfont=dict(color='#333333'), showgrid=False),
                         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color='#333333')),
-                        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                        paper_bgcolor="white", plot_bgcolor="white",
                         margin=dict(t=80, b=40, l=40, r=40)
                     )
                     st.plotly_chart(fig_evo_u, use_container_width=True)
@@ -662,9 +688,9 @@ if not df_ventas_raw.empty:
                     conteo_global_uct.columns = ['Estado', 'Cantidad']
                     fig_pie_uct = px.pie(
                         conteo_global_uct, names='Estado', values='Cantidad', title='Distribución General de NPS (UCT)',
-                        color='Estado', color_discrete_map={'Promotor': '#2ecc71', 'Neutro': '#f1c40f', 'Detractor': '#e74c3c'}, hole=0.4
+                        color='Estado', color_discrete_map={'Promotor': '#428bca', 'Neutro': '#d3d3d3', 'Detractor': '#e74c3c'}, hole=0.4
                     )
-                    fig_pie_uct.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(color='#333333'), title=dict(font=dict(size=18)))
+                    fig_pie_uct.update_layout(paper_bgcolor="white", plot_bgcolor="white", font=dict(color='#333333'), title=dict(font=dict(size=18)))
                     pie_u2.plotly_chart(fig_pie_uct, use_container_width=True)
                     
                     st.write("#### 📋 Registro Detallado de Clientes con Comentarios (UCT)")
@@ -730,7 +756,7 @@ if not df_ventas_raw.empty:
                 st.plotly_chart(crear_reloj(nps_tpa_actual, "NPS Transaccional TPA (0,8 ptos)", OBJETIVO_NPS_TPA, 100), use_container_width=True)
             with ct2:
                 st.markdown(f'''
-                    <div style="background-color:#ffffff; padding:15px; border-radius:8px; border-left:5px solid #1f77b4; box-shadow:0 2px 5px rgba(0,0,0,0.05); text-align:center; height:100%; display:flex; flex-direction:column; justify-content:center;">
+                    <div style="background-color:#ffffff; padding:15px; border-radius:8px; border-left:5px solid #428bca; box-shadow:0 2px 5px rgba(0,0,0,0.05); text-align:center; height:100%; display:flex; flex-direction:column; justify-content:center;">
                         <span style="color:#555555; font-size:16px; font-weight:bold;">TOTAL DE ENCUESTAS VÁLIDAS (TPA)</span><br>
                         <span style="font-size:48px; font-weight:bold; color:#333333;">{len(df_nps_valid_t)}</span>
                     </div>
@@ -759,11 +785,11 @@ if not df_ventas_raw.empty:
 
                         fig_bar_tpa = px.bar(
                             conteo_suc, x='Recuento', y='Tipo de cliente', orientation='h',
-                            text='Recuento', color_discrete_sequence=['#3498db']
+                            text='Recuento', color_discrete_sequence=['#428bca']
                         )
                         fig_bar_tpa.update_layout(
                             title=dict(text=f"Recuento de registros ({suc})", font=dict(color='#333333')),
-                            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                            paper_bgcolor="white", plot_bgcolor="white",
                             height=250,
                             margin=dict(l=0, r=0, t=30, b=0),
                             xaxis=dict(title=dict(text="", font=dict(color='#333333')), showgrid=True, gridcolor='#e6e6e6', tickfont=dict(color='#333333')),
@@ -899,7 +925,7 @@ if not df_ventas_raw.empty:
                 st.plotly_chart(crear_reloj(nps_t26_global, "NPS Transaccional (Global)", OBJETIVO_NPS_T26, 100), use_container_width=True)
             with c2:
                 st.markdown(f'''
-                    <div style="background-color:#ffffff; padding:15px; border-radius:8px; border-left:5px solid #1f77b4; box-shadow:0 2px 5px rgba(0,0,0,0.05); text-align:center; height:100%; display:flex; flex-direction:column; justify-content:center;">
+                    <div style="background-color:#ffffff; padding:15px; border-radius:8px; border-left:5px solid #428bca; box-shadow:0 2px 5px rgba(0,0,0,0.05); text-align:center; height:100%; display:flex; flex-direction:column; justify-content:center;">
                         <span style="color:#555555; font-size:16px; font-weight:bold;">TOTAL DE ENCUESTAS</span><br>
                         <span style="font-size:48px; font-weight:bold; color:#333333;">{len(df_nps_valid_t26)}</span>
                     </div>
@@ -927,11 +953,11 @@ if not df_ventas_raw.empty:
                         
                         fig_bar = px.bar(
                             conteo, x='Recuento', y='Tipo de cliente', orientation='h',
-                            text='Recuento', color_discrete_sequence=['#3498db']
+                            text='Recuento', color_discrete_sequence=['#428bca']
                         )
                         fig_bar.update_layout(
                             title=dict(text="Recuento de registros", font=dict(color='#333333')),
-                            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                            paper_bgcolor="white", plot_bgcolor="white",
                             height=250,
                             margin=dict(l=0, r=0, t=30, b=0),
                             xaxis=dict(title=dict(text="", font=dict(color='#333333')), showgrid=True, gridcolor='#e6e6e6', tickfont=dict(color='#333333')),
