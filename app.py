@@ -284,7 +284,7 @@ if not df_ventas_raw.empty:
             
             fig_evolucion.add_trace(go.Bar(
                 x=df_tabla_mensual['Mes'], y=df_tabla_mensual['Q encuestas'], 
-                name='Cant. Encuestas', marker_color='#B0C4DE', 
+                name='Cant. Encuestas', marker_color='rgba(169, 169, 169, 0.4)', 
                 yaxis='y2', text=df_tabla_mensual['Q encuestas'].apply(lambda x: f"<b>{x}</b>"), textposition='auto',
                 textfont=dict(color='#333333', size=12)
             ))
@@ -306,8 +306,8 @@ if not df_ventas_raw.empty:
             
             fig_evolucion.update_layout(
                 title=dict(text="Evolución de SSI, NPS y Volumen de Encuestas", font=dict(color='#333333', size=20)),
-                yaxis=dict(title="Puntaje / Porcentaje", range=[-100, 110], zeroline=True, zerolinecolor='#cccccc', zerolinewidth=2, tickfont=dict(color='#333333'), titlefont=dict(color='#333333'), showgrid=True, gridcolor='#e6e6e6'),
-                yaxis2=dict(title="Cantidad de Encuestas", overlaying='y', side='right', range=[y2_min, y2_max], showgrid=False, zeroline=False, tickfont=dict(color='#333333'), titlefont=dict(color='#333333')),
+                yaxis=dict(title=dict(text="Puntaje / Porcentaje", font=dict(color='#333333')), range=[-100, 110], zeroline=True, zerolinecolor='#cccccc', zerolinewidth=2, tickfont=dict(color='#333333'), showgrid=True, gridcolor='#e6e6e6'),
+                yaxis2=dict(title=dict(text="Cantidad de Encuestas", font=dict(color='#333333')), overlaying='y', side='right', range=[y2_min, y2_max], showgrid=False, zeroline=False, tickfont=dict(color='#333333')),
                 xaxis=dict(tickfont=dict(color='#333333')),
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color='#333333')),
                 paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
@@ -344,7 +344,7 @@ if not df_ventas_raw.empty:
                 conteo_global_0km, names='Estado', values='Cantidad', title='Distribución General de NPS',
                 color='Estado', color_discrete_map={'Promotor': '#2ecc71', 'Neutro': '#f1c40f', 'Detractor': '#e74c3c'}, hole=0.4
             )
-            fig_pie_0km.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(color='#333333'), title_font=dict(size=18))
+            fig_pie_0km.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(color='#333333'), title=dict(font=dict(size=18)))
             pie_col1.plotly_chart(fig_pie_0km, use_container_width=True)
             
             # --- 2. GRÁFICO POR SUCURSAL EN BARRAS (0km) ---
@@ -354,7 +354,13 @@ if not df_ventas_raw.empty:
                 title='Distribución de NPS por Sucursal', barmode='stack',
                 color_discrete_map={'Promotor': '#2ecc71', 'Neutro': '#f1c40f', 'Detractor': '#e74c3c'}
             )
-            fig_bar_suc_0km.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(color='#333333'), xaxis_title="Sucursal", yaxis_title="Cantidad", title_font=dict(size=18))
+            fig_bar_suc_0km.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", 
+                font=dict(color='#333333'), 
+                xaxis=dict(title=dict(text="Sucursal")), 
+                yaxis=dict(title=dict(text="Cantidad")), 
+                title=dict(font=dict(size=18))
+            )
             pie_col2.plotly_chart(fig_bar_suc_0km, use_container_width=True)
             
             st.write("#### 📋 Registro Detallado de Clientes con Comentarios")
@@ -426,9 +432,8 @@ if not df_ventas_raw.empty:
             altura_dinamica = max(400, len(df_resumen) * 45)
 
             fig_ranking.update_layout(
-                yaxis_title="Vendedor", 
-                xaxis=dict(title="Volumen de Encuestas", range=[0, x_max_rank], showgrid=True, gridcolor='#e6e6e6', tickfont=dict(color='#333333'), titlefont=dict(color='#333333')), 
-                yaxis=dict(tickfont=dict(color='#333333'), titlefont=dict(color='#333333')),
+                xaxis=dict(title=dict(text="Volumen de Encuestas", font=dict(color='#333333')), range=[0, x_max_rank], showgrid=True, gridcolor='#e6e6e6', tickfont=dict(color='#333333')), 
+                yaxis=dict(title=dict(text="Vendedor", font=dict(color='#333333')), tickfont=dict(color='#333333')),
                 paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                 height=altura_dinamica,
                 margin=dict(l=150, r=50, t=40, b=40)
@@ -621,8 +626,8 @@ if not df_ventas_raw.empty:
 
                     fig_evo_u.update_layout(
                         title=dict(text="Evolución de SSI, NPS y Volumen de Encuestas (UCT)", font=dict(color='#333333', size=20)),
-                        yaxis=dict(title="Puntaje / Porcentaje", range=[-100, 110], zeroline=True, zerolinecolor='#cccccc', zerolinewidth=2, tickfont=dict(color='#333333'), titlefont=dict(color='#333333'), showgrid=True, gridcolor='#e6e6e6'),
-                        yaxis2=dict(title="Cantidad de Encuestas", overlaying='y', side='right', range=[y2_min_u, y2_max_u], showgrid=False, zeroline=False, tickfont=dict(color='#333333'), titlefont=dict(color='#333333')),
+                        yaxis=dict(title=dict(text="Puntaje / Porcentaje", font=dict(color='#333333')), range=[-100, 110], zeroline=True, zerolinecolor='#cccccc', zerolinewidth=2, tickfont=dict(color='#333333'), showgrid=True, gridcolor='#e6e6e6'),
+                        yaxis2=dict(title=dict(text="Cantidad de Encuestas", font=dict(color='#333333')), overlaying='y', side='right', range=[y2_min_u, y2_max_u], showgrid=False, zeroline=False, tickfont=dict(color='#333333')),
                         xaxis=dict(tickfont=dict(color='#333333')),
                         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color='#333333')),
                         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
@@ -653,14 +658,13 @@ if not df_ventas_raw.empty:
                     # Gráfico de torta centrado (sin columnas)
                     pie_u1, pie_u2, pie_u3 = st.columns([1, 2, 1])
                     
-                    # --- 1. GRÁFICO GLOBAL DE TORA (UCT) ---
                     conteo_global_uct = df_nps_valid_u['Estado_NPS'].value_counts().reset_index()
                     conteo_global_uct.columns = ['Estado', 'Cantidad']
                     fig_pie_uct = px.pie(
                         conteo_global_uct, names='Estado', values='Cantidad', title='Distribución General de NPS (UCT)',
                         color='Estado', color_discrete_map={'Promotor': '#2ecc71', 'Neutro': '#f1c40f', 'Detractor': '#e74c3c'}, hole=0.4
                     )
-                    fig_pie_uct.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(color='#333333'), title_font=dict(size=18))
+                    fig_pie_uct.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(color='#333333'), title=dict(font=dict(size=18)))
                     pie_u2.plotly_chart(fig_pie_uct, use_container_width=True)
                     
                     st.write("#### 📋 Registro Detallado de Clientes con Comentarios (UCT)")
@@ -759,13 +763,11 @@ if not df_ventas_raw.empty:
                         )
                         fig_bar_tpa.update_layout(
                             title=dict(text=f"Recuento de registros ({suc})", font=dict(color='#333333')),
-                            xaxis_title="",
-                            yaxis_title="Tipo de cliente",
                             paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                             height=250,
                             margin=dict(l=0, r=0, t=30, b=0),
-                            xaxis=dict(showgrid=True, gridcolor='#e6e6e6', tickfont=dict(color='#333333')),
-                            yaxis=dict(tickfont=dict(color='#333333'), titlefont=dict(color='#333333'))
+                            xaxis=dict(title=dict(text="", font=dict(color='#333333')), showgrid=True, gridcolor='#e6e6e6', tickfont=dict(color='#333333')),
+                            yaxis=dict(title=dict(text="Tipo de cliente", font=dict(color='#333333')), tickfont=dict(color='#333333'))
                         )
                         fig_bar_tpa.update_traces(textposition='outside', textfont=dict(color='#333333'))
                         st.plotly_chart(fig_bar_tpa, use_container_width=True)
@@ -929,13 +931,11 @@ if not df_ventas_raw.empty:
                         )
                         fig_bar.update_layout(
                             title=dict(text="Recuento de registros", font=dict(color='#333333')),
-                            xaxis_title="",
-                            yaxis_title="Tipo de cliente",
                             paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                             height=250,
                             margin=dict(l=0, r=0, t=30, b=0),
-                            xaxis=dict(showgrid=True, gridcolor='#e6e6e6', tickfont=dict(color='#333333')),
-                            yaxis=dict(tickfont=dict(color='#333333'), titlefont=dict(color='#333333'))
+                            xaxis=dict(title=dict(text="", font=dict(color='#333333')), showgrid=True, gridcolor='#e6e6e6', tickfont=dict(color='#333333')),
+                            yaxis=dict(title=dict(text="Tipo de cliente", font=dict(color='#333333')), tickfont=dict(color='#333333'))
                         )
                         fig_bar.update_traces(textposition='outside', textfont=dict(color='#333333'))
                         st.plotly_chart(fig_bar, use_container_width=True)
@@ -1026,11 +1026,11 @@ if not df_ventas_raw.empty:
                     
                     fig_myst.update_traces(texttemplate='<b>%{text:.1f}%</b>', textposition='outside', textfont=dict(color='#333333'))
                     fig_myst.update_layout(
-                        paper_bgcolor="rgba(0,0,0,0)", 
-                        plot_bgcolor="rgba(0,0,0,0)", 
+                        paper_bgcolor="white", 
+                        plot_bgcolor="white", 
                         font=dict(color='#333333', size=14),
-                        yaxis=dict(range=[0, max(100, df_myst_agrupado['Resultado_Num'].max() * 1.2)], zeroline=False, tickfont=dict(color='#333333'), titlefont=dict(color='#333333')),
-                        xaxis=dict(showgrid=False, tickfont=dict(color='#333333'), titlefont=dict(color='#333333')),
+                        yaxis=dict(title=dict(text="Resultado Promedio (%)", font=dict(color='#333333')), range=[0, max(100, df_myst_agrupado['Resultado_Num'].max() * 1.2)], zeroline=False, tickfont=dict(color='#333333')),
+                        xaxis=dict(title=dict(text="Punto de Venta", font=dict(color='#333333')), showgrid=False, tickfont=dict(color='#333333')),
                         margin=dict(t=50, b=50),
                         legend=dict(font=dict(color='#333333'))
                     )
