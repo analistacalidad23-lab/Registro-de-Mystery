@@ -299,13 +299,13 @@ if not df_ventas_raw.empty:
             
             fig_evolucion.add_trace(go.Bar(
                 x=df_tabla_mensual['Mes'], y=df_tabla_mensual['Q encuestas'], 
-                name='Cant. Encuestas', marker_color='rgba(169, 169, 169, 0.3)', 
+                name='Cant. Encuestas', marker_color='rgba(169, 169, 169, 0.4)', 
                 yaxis='y2', text=df_tabla_mensual['Q encuestas'].apply(lambda x: f"<b>{x}</b>"), textposition='auto',
                 textfont=dict(color='#333333', size=12)
             ))
             fig_evolucion.add_trace(go.Scatter(
                 x=df_tabla_mensual['Mes'], y=df_tabla_mensual['SSI Puro'], 
-                mode='lines+markers+text', name='SSI Puro', line=dict(color='#3498db', width=3), 
+                mode='lines+markers+text', name='SSI Puro', line=dict(color='#1f77b4', width=3), 
                 text=df_tabla_mensual['SSI Puro'].apply(lambda x: f"<b>{x:.1f}</b>"), textposition='top center',
                 textfont=dict(color='#333333', size=12)
             ))
@@ -316,6 +316,10 @@ if not df_ventas_raw.empty:
                 textfont=dict(color='#333333', size=12)
             ))
             
+            # --- LÍNEAS DE OBJETIVO ---
+            fig_evolucion.add_hline(y=OBJETIVO_SSI, line_dash="dot", line_color="#E3000F", annotation_text=f"Obj. SSI ({OBJETIVO_SSI})", annotation_position="top left", annotation_font=dict(color="#E3000F", size=13))
+            fig_evolucion.add_hline(y=OBJETIVO_NPS, line_dash="dot", line_color="#E3000F", annotation_text=f"Obj. NPS ({OBJETIVO_NPS}%)", annotation_position="bottom right", annotation_font=dict(color="#E3000F", size=13))
+
             y2_max = max(10, df_tabla_mensual['Q encuestas'].max() * 1.5)
             y2_min = - (100 / 110) * y2_max
             
@@ -352,6 +356,7 @@ if not df_ventas_raw.empty:
             
             pie_col1, pie_col2 = st.columns(2)
             
+            # --- 1. GRÁFICO GLOBAL DE TORA (0km) ---
             conteo_global_0km = df_nps_valid['Estado_NPS'].value_counts().reset_index()
             conteo_global_0km.columns = ['Estado', 'Cantidad']
             fig_pie_0km = px.pie(
@@ -361,6 +366,7 @@ if not df_ventas_raw.empty:
             fig_pie_0km.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(color='#333333'), title=dict(font=dict(size=18)))
             pie_col1.plotly_chart(fig_pie_0km, use_container_width=True)
             
+            # --- 2. GRÁFICO POR SUCURSAL EN BARRAS (0km) ---
             df_suc_bar_0km = df_nps_valid.groupby([col_sucursal, 'Estado_NPS']).size().reset_index(name='Cantidad')
             fig_bar_suc_0km = px.bar(
                 df_suc_bar_0km, x=col_sucursal, y='Cantidad', color='Estado_NPS',
@@ -638,6 +644,10 @@ if not df_ventas_raw.empty:
                         textfont=dict(color='#333333', size=12)
                     ))
                     
+                    # --- LÍNEAS DE OBJETIVO ---
+                    fig_evo_u.add_hline(y=OBJ_SSI_UCT, line_dash="dot", line_color="#E3000F", annotation_text=f"Obj. SSI ({OBJ_SSI_UCT})", annotation_position="top left", annotation_font=dict(color="#E3000F", size=13))
+                    fig_evo_u.add_hline(y=OBJ_NPS_UCT, line_dash="dot", line_color="#E3000F", annotation_text=f"Obj. NPS ({OBJ_NPS_UCT}%)", annotation_position="bottom right", annotation_font=dict(color="#E3000F", size=13))
+
                     y2_max_u = max(10, df_res_u['Q encuestas'].max() * 1.5)
                     y2_min_u = - (100 / 110) * y2_max_u
 
