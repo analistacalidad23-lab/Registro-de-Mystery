@@ -14,35 +14,22 @@ st.set_page_config(
 
 st.markdown("""
     <style>
-    /* Fondo general de la aplicación */
-    .stApp {
-        background-color: #F4F6F9;
-    }
+    /* Estilos adaptados al Modo Claro nativo de Streamlit */
+    .main-title { font-size: 28px; font-weight: bold; color: #1f77b4; margin-bottom: 5px; border-bottom: 2px solid #1f77b4; padding-bottom: 5px;}
+    .subtitle { font-size: 15px; color: #555555; margin-bottom: 25px; font-weight: 500;}
     
-    /* Títulos con gris oscuro/negro suave */
-    .main-title { font-size: 28px; font-weight: bold; color: #333333; margin-bottom: 5px; border-bottom: 2px solid #A4C5D6; padding-bottom: 5px;}
-    .subtitle { font-size: 14px; color: #666666; margin-bottom: 25px; font-weight: 500;}
-    
-    /* Panel superior de filtros estilo Tarjeta con borde celeste */
+    /* Panel superior de filtros (estilo tarjeta clara) */
     .sticky-filters {
         position: sticky;
         top: 0px;
         z-index: 999;
-        background-color: #FFFFFF;
-        padding: 15px 20px;
-        border: 1px solid #A4C5D6;
+        background-color: #ffffff;
+        padding: 15px 15px;
+        border: 1px solid #e6e6e6;
         margin-bottom: 20px;
-        border-radius: 8px;
-        box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.05);
+        border-radius: 6px;
+        box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.05);
     }
-
-    /* Forzar contraste en textos nativos */
-    h1, h2, h3, h4, p, span, label {
-        color: #333333 !important;
-    }
-    
-    /* Estilo para pestañas */
-    .stTabs [data-baseweb="tab"] { color: #428bca; font-weight: 600; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -121,9 +108,10 @@ def crear_reloj(valor, titulo, objetivo, max_val, color_ok="#428bca", color_bad=
     color_actual = color_ok if valor >= objetivo else color_bad
     fig = go.Figure(go.Indicator(
         mode="gauge+number+delta", value=valor,
-        number={'suffix': "%" if "NPS" in titulo else "", 'font': {'size': 40, 'color': color_actual}},
-        delta={'reference': objetivo, 'increasing': {'color': color_ok}, 'decreasing': {'color': color_bad}},
-        title={'text': titulo, 'font': {'size': 16, 'color': '#333333'}},
+        # Tamaño de fuente reducido a la mitad
+        number={'suffix': "%" if "NPS" in titulo else "", 'font': {'size': 30, 'color': color_actual}},
+        delta={'reference': objetivo, 'increasing': {'color': color_ok}, 'decreasing': {'color': color_bad}, 'font': {'size': 14}},
+        title={'text': titulo, 'font': {'size': 14, 'color': '#333333'}},
         gauge={'axis': {'range': [-100 if "NPS" in titulo else 0, max_val], 'tickwidth': 1, 'tickcolor': '#333333'}, 
                'bar': {'color': color_actual},
                'bgcolor': "white",
@@ -133,8 +121,20 @@ def crear_reloj(valor, titulo, objetivo, max_val, color_ok="#428bca", color_bad=
                          {'range': [objetivo, max_val], 'color': 'rgba(66, 139, 202, 0.08)'}],
                'threshold': {'line': {'color': "#333333", 'width': 3}, 'thickness': 0.75, 'value': objetivo}}
     ))
-    fig.update_layout(height=280, margin=dict(l=10, r=10, t=40, b=10), paper_bgcolor="rgba(0,0,0,0)", font={'color': "#333333"})
+    # Reducción de altura a la mitad (de 300 a 170) y ajuste de márgenes
+    fig.update_layout(height=170, margin=dict(l=10, r=10, t=30, b=5), paper_bgcolor="rgba(0,0,0,0)", font={'color': "#333333"})
     return fig
+
+# Nueva función para renderizar el reloj + el recuadro inferior unificado
+def render_reloj_con_recuadro(valor, titulo, objetivo, max_val, recuadro_texto):
+    fig = crear_reloj(valor, titulo, objetivo, max_val)
+    st.plotly_chart(fig, use_container_width=True)
+    # Recuadro dinámico con margen negativo para pegarlo debajo del reloj
+    st.markdown(f'''
+        <div style="background-color:#ffffff; padding:6px; border-radius:6px; border:1px solid #A4C5D6; text-align:center; margin-top:-35px; margin-bottom:15px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+            <span style="color:#003366; font-size:14px; font-weight:bold;">{recuadro_texto}</span>
+        </div>
+    ''', unsafe_allow_html=True)
 
 # Cargar los dataframes
 df_ventas_raw = cargar_datos(URL_VENTAS)
@@ -278,8 +278,10 @@ if not df_ventas_raw.empty:
         nps_actual = calcular_nps(df_filtrado[col_nps])
 
         col1, col2 = st.columns(2)
-        with col1: st.plotly_chart(crear_reloj(ssi_actual, "Indicador SSI (4,5 ptos) - Objetivo: 95.6", OBJETIVO_SSI, 100), use_container_width=True)
-        with col2: st.plotly_chart(crear_reloj(nps_actual, "Indicador NPS (1,2 ptos) - Objetivo: 87%", OBJETIVO_NPS, 100), use_container_width=True)
+        with col1: 
+            render_reloj_con_recuadro(ssi_actual, "Indicador SSI", OBJETIVO_SSI, 100, "Objetivo: 95.6 | Puntaje: 4,5 ptos")
+        with col2: 
+            render_reloj_con_recuadro(nps_actual, "Indicador NPS", OBJETIVO_NPS, 100, "Objetivo: 87.0% | Puntaje: 1,2 ptos")
 
         st.markdown("---")
         st.write(f"### Desempeño Mensual - Boca de Venta: {boca_sel}")
@@ -606,8 +608,10 @@ if not df_ventas_raw.empty:
             
             st.write("#### ⏱️ Estado Actual vs Objetivos UCT")
             cu1, cu2 = st.columns(2)
-            with cu1: st.plotly_chart(crear_reloj(ssi_uct_actual, "SSI UCT (0,8 ptos) - Objetivo: 94.5", OBJ_SSI_UCT, 100), use_container_width=True)
-            with cu2: st.plotly_chart(crear_reloj(nps_uct_actual, "NPS UCT (0,8 ptos) - Objetivo: 89%", OBJ_NPS_UCT, 100), use_container_width=True)
+            with cu1: 
+                render_reloj_con_recuadro(ssi_uct_actual, "SSI UCT", OBJ_SSI_UCT, 100, "Objetivo: 94.5 | Puntaje: 0,8 ptos")
+            with cu2: 
+                render_reloj_con_recuadro(nps_uct_actual, "NPS UCT", OBJ_NPS_UCT, 100, "Objetivo: 89.0% | Puntaje: 0,8 ptos")
             
             st.write("#### 📊 Evolución de los 5 Principales Indicadores")
             if top_5_cols:
@@ -753,7 +757,7 @@ if not df_ventas_raw.empty:
             st.write("#### ⏱️ Estado Actual vs Objetivo TPA (Global)")
             ct1, ct2 = st.columns(2)
             with ct1:
-                st.plotly_chart(crear_reloj(nps_tpa_actual, "NPS Transaccional TPA (0,8 ptos)", OBJETIVO_NPS_TPA, 100), use_container_width=True)
+                render_reloj_con_recuadro(nps_tpa_actual, "NPS Transaccional TPA", OBJETIVO_NPS_TPA, 100, "Objetivo: 85.0% | Puntaje: 0,8 ptos")
             with ct2:
                 st.markdown(f'''
                     <div style="background-color:#ffffff; padding:15px; border-radius:8px; border-left:5px solid #428bca; box-shadow:0 2px 5px rgba(0,0,0,0.05); text-align:center; height:100%; display:flex; flex-direction:column; justify-content:center;">
@@ -777,7 +781,7 @@ if not df_ventas_raw.empty:
                     nps_suc = calcular_nps_texto(df_suc['Estado_NPS'])
 
                     with relojes_tpa_cols[idx]:
-                        st.plotly_chart(crear_reloj(nps_suc, f"NPS - {suc}", OBJETIVO_NPS_TPA, 100), use_container_width=True)
+                        render_reloj_con_recuadro(nps_suc, f"NPS - {suc}", OBJETIVO_NPS_TPA, 100, "Objetivo: 85.0%")
 
                     with barras_tpa_cols[idx]:
                         conteo_suc = df_suc['Estado_NPS'].value_counts().reindex(['Detractor', 'Neutro', 'Promotor']).fillna(0).reset_index()
@@ -922,7 +926,7 @@ if not df_ventas_raw.empty:
 
             c1, c2 = st.columns(2)
             with c1:
-                st.plotly_chart(crear_reloj(nps_t26_global, "NPS Transaccional (Global)", OBJETIVO_NPS_T26, 100), use_container_width=True)
+                render_reloj_con_recuadro(nps_t26_global, "NPS Transaccional (Global)", OBJETIVO_NPS_T26, 100, "Objetivo: 85.0%")
             with c2:
                 st.markdown(f'''
                     <div style="background-color:#ffffff; padding:15px; border-radius:8px; border-left:5px solid #428bca; box-shadow:0 2px 5px rgba(0,0,0,0.05); text-align:center; height:100%; display:flex; flex-direction:column; justify-content:center;">
@@ -945,7 +949,7 @@ if not df_ventas_raw.empty:
                     nps_etapa = calcular_nps_texto(df_etapa['Estado_NPS'])
                     
                     with relojes_cols[i]:
-                        st.plotly_chart(crear_reloj(nps_etapa, f"NPS - {etapa}", OBJETIVO_NPS_T26, 100), use_container_width=True)
+                        render_reloj_con_recuadro(nps_etapa, f"NPS - {etapa}", OBJETIVO_NPS_T26, 100, "Objetivo: 85.0%")
                         
                     with barras_cols[i]:
                         conteo = df_etapa['Estado_NPS'].value_counts().reindex(['Detractor', 'Neutro', 'Promotor']).fillna(0).reset_index()
