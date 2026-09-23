@@ -490,7 +490,7 @@ if not df_ventas_raw.empty:
                 cant_encuestas, ssi_promedio, atencion_promedio = len(grupo), grupo['SSI_Num'].mean(), grupo[col_atencion_vend].mean()
                 if pd.isna(atencion_promedio) or cant_encuestas == 0: comision = 0.00
                 elif atencion_promedio*10 < 95.5: comision = -0.05
-                else: comision = 0.01
+                else: comision = 0.1
                 datos_comision.append({
                     'Vendedor': vend, 'Cantidad de Encuestas': cant_encuestas,
                     'Atención del Vendedor (x10)': (atencion_promedio * 10 if pd.notna(atencion_promedio) else np.nan),
@@ -528,7 +528,7 @@ if not df_ventas_raw.empty:
                 comision = 0.00
                 if pd.notna(nps_vendedor):
                     if nps_vendedor >= 85.0:
-                        comision = 0.01
+                        comision = 0.1
                     else:
                         comision = -0.05
                         
