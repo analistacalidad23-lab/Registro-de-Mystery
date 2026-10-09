@@ -937,24 +937,54 @@ if not df_ventas_raw.empty:
             
             st.markdown("---")
             
-            # --- 1. EVOLUCIÓN HISTÓRICA POR ETAPA ---
+           # --- 1. EVOLUCIÓN HISTÓRICA POR ETAPA ---
             st.write("#### 📅 Evolución Histórica del NPS por Etapa")
             if not df_nps_valid_t26.empty:
-                # Agrupamos por mes y etapa para calcular el NPS de cada punto
-                df_evo_t26 = df_nps_valid_t26.groupby(['Mes_Num', 'Mes_Filtro', 'Etapa_Filtro']).apply(
-                    lambda x: calcular_nps_texto(x['Estado_NPS'])
-                ).reset_index(name='NPS')
+                # Calculamos el NPS y contamos los tipos de clientes por mes y etapa
+                def calcular_metricas_hist(grupo):
+                    prom = (grupo['Estado_NPS'] == 'Promotor').sum()
+                    neu = (grupo['Estado_NPS'] == 'Neutro').sum()
+                    det = (grupo['Estado_NPS'] == 'Detractor').sum()
+                    nps = calcular_nps_texto(grupo['Estado_NPS'])
+                    return pd.Series({'NPS': nps, 'Promotores': prom, 'Neutros': neu, 'Detractores': det})
+
+                df_evo_t26 = df_nps_valid_t26.groupby(['Mes_Num', 'Mes_Filtro', 'Etapa_Filtro']).apply(calcular_metricas_hist).reset_index()
                 df_evo_t26 = df_evo_t26.sort_values('Mes_Num')
 
                 fig_evo_t26 = px.line(
                     df_evo_t26, x='Mes_Filtro', y='NPS', color='Etapa_Filtro', markers=True,
+                    text='NPS', # Activa las etiquetas de datos en la línea
                     title='Tendencia Mensual de NPS según Etapa de Plan de Ahorro',
-                    labels={'Mes_Filtro': 'Mes de Encuesta', 'NPS': 'NPS (%)', 'Etapa_Filtro': 'Etapa'}
+                    labels={'Mes_Filtro': 'Mes de Encuesta', 'NPS': 'NPS (%)', 'Etapa_Filtro': 'Etapa'},
+                    custom_data=['Promotores', 'Neutros', 'Detractores'] # Pasa los datos extra al tooltip
                 )
-                fig_evo_t26.add_hline(y=OBJETIVO_NPS_T26, line_dash="dot", line_color="#E3000F", annotation_text=f"Objetivo ({OBJETIVO_NPS_T26}%)", annotation_position="bottom right")
-                fig_evo_t26.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(color='#333333'), yaxis=dict(range=[-100, 110], zeroline=True, zerolinecolor='#cccccc'))
-                st.plotly_chart(fig_evo_t26, use_container_width=True)
+                
+                # Configuramos el formato visual de la etiqueta y el cuadro emergente (hover)
+                fig_evo_t26.update_traces(
+                    texttemplate='<b>%{text:.1f}%</b>',
+                    textposition='top center',
+                    textfont=dict(size=11, color='#333333'),
+                    hovertemplate=(
+                        "<b>Mes:</b> %{x}<br>"
+                        "<b>NPS:</b> %{y:.1f}%<br>"
+                        "🟢 <b>Promotores:</b> %{customdata[0]}<br>"
+                        "🟡 <b>Neutros:</b> %{customdata[1]}<br>"
+                        "🔴 <b>Detractores:</b> %{customdata[2]}<br>"
+                        "<extra></extra>"
+                    )
+                )
 
+                fig_evo_t26.add_hline(y=OBJETIVO_NPS_T26, line_dash="dot", line_color="#E3000F", annotation_text=f"Objetivo ({OBJETIVO_NPS_T26}%)", annotation_position="bottom right")
+                
+                # Ajustamos el margen superior para que los porcentajes no queden cortados
+                fig_evo_t26.update_layout(
+                    paper_bgcolor="rgba(0,0,0,0)", 
+                    plot_bgcolor="rgba(0,0,0,0)", 
+                    font=dict(color='#333333'), 
+                    yaxis=dict(range=[-100, 115], zeroline=True, zerolinecolor='#cccccc'),
+                    margin=dict(t=60)
+                )
+                st.plotly_chart(fig_evo_t26, use_container_width=True)
             # --- 2. CUADRO RESUMEN: NPS Y TIPO DE CLIENTES ---
             st.write("#### 📊 Cuadro Resumen: NPS y Tipos de Cliente por Etapa")
             if not df_nps_valid_t26.empty:
