@@ -921,8 +921,8 @@ if not df_ventas_raw.empty:
             nps_t26_global = calcular_nps_texto(df_nps_valid_t26['Estado_NPS'])
 
             st.write("### 📈 Encuestas de Marca (Toyota - TPA26)")
-            st.write("Métricas de satisfacción global y por etapa.")
-
+            
+            # --- RELOJ GLOBAL Y TOTAL DE ENCUESTAS ---
             c1, c2 = st.columns(2)
             with c1:
                 renderizar_cabecera_reloj("NPS Transaccional (Global)", f"Objetivo: {OBJETIVO_NPS_T26}%")
@@ -930,69 +930,113 @@ if not df_ventas_raw.empty:
             with c2:
                 st.markdown(f'''
                     <div style="background-color:#ffffff; padding:15px; border-radius:8px; border:1px solid #e6e6e6; border-left:5px solid #1f77b4; box-shadow:0 2px 5px rgba(0,0,0,0.05); text-align:center; height:85%; display:flex; flex-direction:column; justify-content:center;">
-                        <span style="color:#555555; font-size:16px; font-weight:bold;">TOTAL DE ENCUESTAS</span><br>
+                        <span style="color:#555555; font-size:16px; font-weight:bold;">TOTAL DE ENCUESTAS EVALUADAS</span><br>
                         <span style="font-size:48px; font-weight:bold; color:#333333;">{len(df_nps_valid_t26)}</span>
                     </div>
                 ''', unsafe_allow_html=True)
             
             st.markdown("---")
-            st.write("#### 📊 Desglose de NPS por Etapa")
             
-            etapas_unicas = [e for e in df_nps_valid_t26['Etapa_Filtro'].unique() if e.lower() != 'nan']
-            
-            if etapas_unicas:
-                relojes_cols = st.columns(len(etapas_unicas))
-                barras_cols = st.columns(len(etapas_unicas))
-                
-                for i, etapa in enumerate(etapas_unicas):
-                    df_etapa = df_nps_valid_t26[df_nps_valid_t26['Etapa_Filtro'] == etapa]
-                    nps_etapa = calcular_nps_texto(df_etapa['Estado_NPS'])
-                    
-                    with relojes_cols[i]:
-                        renderizar_cabecera_reloj(f"NPS - {etapa}", f"Objetivo: {OBJETIVO_NPS_T26}%")
-                        st.plotly_chart(crear_reloj(nps_etapa, OBJETIVO_NPS_T26, 100, min_val=-100, es_nps=True), use_container_width=True)
-                        
-                    with barras_cols[i]:
-                        conteo = df_etapa['Estado_NPS'].value_counts().reindex(['Detractor', 'Neutro', 'Promotor']).fillna(0).reset_index()
-                        conteo.columns = ['Tipo de cliente', 'Recuento']
-                        
-                        fig_bar = px.bar(
-                            conteo, x='Recuento', y='Tipo de cliente', orientation='h',
-                            text='Recuento', color_discrete_sequence=['#3498db']
-                        )
-                        fig_bar.update_layout(
-                            title=dict(text="Recuento de registros", font=dict(color='#333333')),
-                            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                            height=250,
-                            margin=dict(l=0, r=0, t=30, b=0),
-                            xaxis=dict(title=dict(text="", font=dict(color='#333333')), showgrid=True, gridcolor='#e6e6e6', tickfont=dict(color='#333333')),
-                            yaxis=dict(title=dict(text="Tipo de cliente", font=dict(color='#333333')), tickfont=dict(color='#333333'))
-                        )
-                        fig_bar.update_traces(textposition='outside', textfont=dict(color='#333333'))
-                        st.plotly_chart(fig_bar, use_container_width=True)
-                        
-                        with st.expander(f"Ver informe ({etapa})"):
-                            cols_to_show_t26 = [col_cliente_t26, col_nota_t26, 'Estado_NPS', 'Comentario_Cliente']
-                            df_tabla_t26 = df_etapa[cols_to_show_t26].copy()
-                            
-                            df_tabla_t26['Orden_Gravedad'] = df_tabla_t26['Estado_NPS'].map({'Detractor': 1, 'Neutro': 2, 'Promotor': 3})
-                            df_tabla_t26 = df_tabla_t26.sort_values(by=['Orden_Gravedad'])
-                            df_tabla_t26 = df_tabla_t26.drop(columns=['Orden_Gravedad'])
-                            
-                            df_tabla_t26 = df_tabla_t26.rename(columns={
-                                col_cliente_t26: 'Nombre del Cliente',
-                                col_nota_t26: 'Nota',
-                                'Estado_NPS': 'Clasificación',
-                                'Comentario_Cliente': 'Comentario'
-                            })
+            # --- 1. EVOLUCIÓN HISTÓRICA POR ETAPA ---
+            st.write("#### 📅 Evolución Histórica del NPS por Etapa")
+            if not df_nps_valid_t26.empty:
+                # Agrupamos por mes y etapa para calcular el NPS de cada punto
+                df_evo_t26 = df_nps_valid_t26.groupby(['Mes_Num', 'Mes_Filtro', 'Etapa_Filtro']).apply(
+                    lambda x: calcular_nps_texto(x['Estado_NPS'])
+                ).reset_index(name='NPS')
+                df_evo_t26 = df_evo_t26.sort_values('Mes_Num')
 
-                            def color_clasificacion_t26(val):
-                                if val == 'Detractor': return 'color: #e74c3c; font-weight: bold;'
-                                elif val == 'Promotor': return 'color: #2ecc71; font-weight: bold;'
-                                elif val == 'Neutro': return 'color: #f1c40f; font-weight: bold;'
-                                return ''
-                                
-                            st.dataframe(df_tabla_t26.style.map(color_clasificacion_t26, subset=['Clasificación']), use_container_width=True, hide_index=True)
+                fig_evo_t26 = px.line(
+                    df_evo_t26, x='Mes_Filtro', y='NPS', color='Etapa_Filtro', markers=True,
+                    title='Tendencia Mensual de NPS según Etapa de Plan de Ahorro',
+                    labels={'Mes_Filtro': 'Mes de Encuesta', 'NPS': 'NPS (%)', 'Etapa_Filtro': 'Etapa'}
+                )
+                fig_evo_t26.add_hline(y=OBJETIVO_NPS_T26, line_dash="dot", line_color="#E3000F", annotation_text=f"Objetivo ({OBJETIVO_NPS_T26}%)", annotation_position="bottom right")
+                fig_evo_t26.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(color='#333333'), yaxis=dict(range=[-100, 110], zeroline=True, zerolinecolor='#cccccc'))
+                st.plotly_chart(fig_evo_t26, use_container_width=True)
+
+            # --- 2. CUADRO RESUMEN: NPS Y TIPO DE CLIENTES ---
+            st.write("#### 📊 Cuadro Resumen: NPS y Tipos de Cliente por Etapa")
+            if not df_nps_valid_t26.empty:
+                resumen_t26 = []
+                for etapa, grupo in df_nps_valid_t26.groupby('Etapa_Filtro'):
+                    prom = (grupo['Estado_NPS'] == 'Promotor').sum()
+                    neu = (grupo['Estado_NPS'] == 'Neutro').sum()
+                    det = (grupo['Estado_NPS'] == 'Detractor').sum()
+                    nps_etapa = calcular_nps_texto(grupo['Estado_NPS'])
+                    resumen_t26.append({
+                        'Etapa del Plan': etapa,
+                        'Total Encuestas': len(grupo),
+                        'Promotores 🟢': prom,
+                        'Neutros 🟡': neu,
+                        'Detractores 🔴': det,
+                        'NPS Resultante': nps_etapa
+                    })
+                
+                df_resumen_t26 = pd.DataFrame(resumen_t26).sort_values('NPS Resultante', ascending=False)
+                st.dataframe(
+                    df_resumen_t26.style.format({'NPS Resultante': '{:.1f}%'})
+                    .map(lambda val: 'color: #2ecc71; font-weight: bold;' if pd.notna(val) and val >= OBJETIVO_NPS_T26 else 'color: #e74c3c; font-weight: bold;', subset=['NPS Resultante']),
+                    use_container_width=True, hide_index=True
+                )
+
+            st.markdown("---")
+            
+            # --- 3. ANÁLISIS DE COMENTARIOS Y MOTIVOS DE RECLAMO ---
+            st.write("#### 🧠 Análisis de Comentarios y Motivos de Reclamo")
+            st.caption("Categorización automática basada en palabras clave de los comentarios registrados por los clientes.")
+
+            # Función de categorización por NLP (Keywords)
+            def categorizar_comentario(comentario):
+                if pd.isna(comentario): return "Sin comentarios"
+                c = str(comentario).lower()
+                if c == "sin comentarios" or len(c.strip()) < 4: return "Sin comentarios"
+
+                if any(w in c for w in ['demora', 'tiempo', 'tarde', 'espera', 'meses', 'retraso', 'lento']): return "Demora en entrega/procesos"
+                elif any(w in c for w in ['cuota', 'precio', 'aumento', 'caro', 'plata', 'factura', 'cobro', 'pago', 'dinero']): return "Cuotas y Precios"
+                elif any(w in c for w in ['atencion', 'atención', 'asesor', 'vendedor', 'comunicacion', 'comunicación', 'respuesta', 'explicacion', 'informacion', 'información']): return "Atención y Comunicación"
+                elif any(w in c for w in ['tramite', 'papeles', 'firma', 'administrativo', 'patentamiento', 'gestoria']): return "Gestión Administrativa"
+                elif any(w in c for w in ['sorteo', 'licitacion', 'licitación', 'adjudicacion', 'adjudicación', 'salir sorteado']): return "Sorteo y Licitación"
+                elif any(w in c for w in ['taller', 'repuesto', 'service', 'garantia', 'falla', 'roto', 'arreglo']): return "Posventa y Unidad"
+                else: return "Comentario General / Otros"
+
+            # Aplicar categorización
+            df_nps_valid_t26['Motivo_Reclamo'] = df_nps_valid_t26['Comentario_Cliente'].apply(categorizar_comentario)
+            
+            # Filtrar los que tienen comentarios reales
+            df_con_comentarios = df_nps_valid_t26[df_nps_valid_t26['Motivo_Reclamo'] != 'Sin comentarios'].copy()
+
+            if not df_con_comentarios.empty:
+                col_cat1, col_cat2 = st.columns([1, 1.5])
+
+                with col_cat1:
+                    cat_counts = df_con_comentarios['Motivo_Reclamo'].value_counts().reset_index()
+                    cat_counts.columns = ['Categoría', 'Frecuencia']
+                    fig_cat = px.bar(
+                        cat_counts, x='Frecuencia', y='Categoría', orientation='h', 
+                        title="Frecuencia de Menciones", color_discrete_sequence=['#3498db']
+                    )
+                    fig_cat.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", yaxis={'categoryorder':'total ascending'}, font=dict(color='#333333'))
+                    fig_cat.update_traces(texttemplate='<b>%{x}</b>', textposition='outside')
+                    st.plotly_chart(fig_cat, use_container_width=True)
+
+                with col_cat2:
+                    st.write("**Detalle de Clientes (Filtrable)**")
+                    df_mostrar_cat = df_con_comentarios[[col_cliente_t26, 'Etapa_Filtro', 'Estado_NPS', 'Motivo_Reclamo', 'Comentario_Cliente']].copy()
+                    df_mostrar_cat.columns = ['Cliente', 'Etapa', 'Estado', 'Motivo', 'Comentario Textual']
+                    df_mostrar_cat['Orden'] = df_mostrar_cat['Estado'].map({'Detractor': 1, 'Neutro': 2, 'Promotor': 3})
+                    df_mostrar_cat = df_mostrar_cat.sort_values(['Orden']).drop(columns=['Orden'])
+
+                    def color_estado(val):
+                        if val == 'Detractor': return 'color: #e74c3c; font-weight: bold;'
+                        elif val == 'Promotor': return 'color: #2ecc71; font-weight: bold;'
+                        elif val == 'Neutro': return 'color: #f1c40f; font-weight: bold;'
+                        return ''
+
+                    st.dataframe(df_mostrar_cat.style.map(color_estado, subset=['Estado']), use_container_width=True, hide_index=True)
+            else:
+                st.info("No hay clientes con comentarios textuales para analizar en este período.")
+
         else:
             st.warning("No se pudo cargar la hoja TPA26. Verifica que existan las columnas indicadas.")
 
