@@ -1012,9 +1012,9 @@ if not df_ventas_raw.empty:
 
             st.markdown("---")
             
-            # --- 3. ANÁLISIS DE COMENTARIOS Y MOTIVOS DE RECLAMO ---
-            st.write("#### 🧠 Análisis de Comentarios y Motivos de Reclamo")
-            st.caption("Categorización automática basada en palabras clave de los comentarios registrados por los clientes.")
+           # --- 3. ANÁLISIS DE COMENTARIOS Y MOTIVOS DE RECLAMO ---
+            st.write("#### 🧠 Análisis de Comentarios por Tipo de Cliente")
+            st.caption("Categorización automática basada en palabras clave de los comentarios registrados.")
 
             # Función de categorización por NLP (Keywords)
             def categorizar_comentario(comentario):
@@ -1037,38 +1037,77 @@ if not df_ventas_raw.empty:
             df_con_comentarios = df_nps_valid_t26[df_nps_valid_t26['Motivo_Reclamo'] != 'Sin comentarios'].copy()
 
             if not df_con_comentarios.empty:
-                col_cat1, col_cat2 = st.columns([1, 1.5])
+                # Separar los DataFrames por tipo de cliente
+                df_negativos = df_con_comentarios[df_con_comentarios['Estado_NPS'].isin(['Detractor', 'Neutro'])].copy()
+                df_positivos = df_con_comentarios[df_con_comentarios['Estado_NPS'] == 'Promotor'].copy()
 
-                with col_cat1:
-                    cat_counts = df_con_comentarios['Motivo_Reclamo'].value_counts().reset_index()
-                    cat_counts.columns = ['Categoría', 'Frecuencia']
-                    fig_cat = px.bar(
-                        cat_counts, x='Frecuencia', y='Categoría', orientation='h', 
-                        title="Frecuencia de Menciones", color_discrete_sequence=['#3498db']
-                    )
-                    fig_cat.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", yaxis={'categoryorder':'total ascending'}, font=dict(color='#333333'))
-                    fig_cat.update_traces(texttemplate='<b>%{x}</b>', textposition='outside')
-                    st.plotly_chart(fig_cat, use_container_width=True)
+                col_izq, col_der = st.columns(2)
 
-                with col_cat2:
-                    st.write("**Detalle de Clientes (Filtrable)**")
-                    df_mostrar_cat = df_con_comentarios[[col_cliente_t26, 'Etapa_Filtro', 'Estado_NPS', 'Motivo_Reclamo', 'Comentario_Cliente']].copy()
-                    df_mostrar_cat.columns = ['Cliente', 'Etapa', 'Estado', 'Motivo', 'Comentario Textual']
-                    df_mostrar_cat['Orden'] = df_mostrar_cat['Estado'].map({'Detractor': 1, 'Neutro': 2, 'Promotor': 3})
-                    df_mostrar_cat = df_mostrar_cat.sort_values(['Orden']).drop(columns=['Orden'])
+                def color_estado(val):
+                    if val == 'Detractor': return 'color: #e74c3c; font-weight: bold;'
+                    elif val == 'Promotor': return 'color: #2ecc71; font-weight: bold;'
+                    elif val == 'Neutro': return 'color: #f1c40f; font-weight: bold;'
+                    return ''
 
-                    def color_estado(val):
-                        if val == 'Detractor': return 'color: #e74c3c; font-weight: bold;'
-                        elif val == 'Promotor': return 'color: #2ecc71; font-weight: bold;'
-                        elif val == 'Neutro': return 'color: #f1c40f; font-weight: bold;'
-                        return ''
+                # --- LADO IZQUIERDO: DETRACTORES Y NEUTROS ---
+                with col_izq:
+                    st.markdown("##### 😒😐 Detractores y Neutros")
+                    if not df_negativos.empty:
+                        # Gráfico
+                        cat_counts_neg = df_negativos['Motivo_Reclamo'].value_counts().reset_index()
+                        cat_counts_neg.columns = ['Categoría', 'Frecuencia']
+                        fig_neg = px.bar(
+                            cat_counts_neg, x='Frecuencia', y='Categoría', orientation='h', 
+                            color_discrete_sequence=['#e74c3c'], height=250
+                        )
+                        fig_neg.update_layout(
+                            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", 
+                            yaxis={'categoryorder':'total ascending', 'title': ''}, 
+                            xaxis={'title': '', 'showticklabels': False},
+                            font=dict(color='#333333'), margin=dict(l=0, r=0, t=10, b=0)
+                        )
+                        fig_neg.update_traces(texttemplate='<b>%{x}</b>', textposition='outside')
+                        st.plotly_chart(fig_neg, use_container_width=True)
 
-                    st.dataframe(df_mostrar_cat.style.map(color_estado, subset=['Estado']), use_container_width=True, hide_index=True)
+                        # Tabla (ocultamos 'Etapa' para que entre mejor en media pantalla)
+                        df_tabla_neg = df_negativos[[col_cliente_t26, 'Estado_NPS', 'Motivo_Reclamo', 'Comentario_Cliente']].copy()
+                        df_tabla_neg.columns = ['Cliente', 'Estado', 'Motivo', 'Comentario Textual']
+                        df_tabla_neg['Orden'] = df_tabla_neg['Estado'].map({'Detractor': 1, 'Neutro': 2})
+                        df_tabla_neg = df_tabla_neg.sort_values(['Orden']).drop(columns=['Orden'])
+                        
+                        st.dataframe(df_tabla_neg.style.map(color_estado, subset=['Estado']), use_container_width=True, hide_index=True)
+                    else:
+                        st.success("¡Excelente! No hay comentarios de detractores o neutros.")
+
+                # --- LADO DERECHO: PROMOTORES ---
+                with col_der:
+                    st.markdown("##### 😁 Promotores")
+                    if not df_positivos.empty:
+                        # Gráfico
+                        cat_counts_pos = df_positivos['Motivo_Reclamo'].value_counts().reset_index()
+                        cat_counts_pos.columns = ['Categoría', 'Frecuencia']
+                        fig_pos = px.bar(
+                            cat_counts_pos, x='Frecuencia', y='Categoría', orientation='h', 
+                            color_discrete_sequence=['#2ecc71'], height=250
+                        )
+                        fig_pos.update_layout(
+                            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", 
+                            yaxis={'categoryorder':'total ascending', 'title': ''}, 
+                            xaxis={'title': '', 'showticklabels': False},
+                            font=dict(color='#333333'), margin=dict(l=0, r=0, t=10, b=0)
+                        )
+                        fig_pos.update_traces(texttemplate='<b>%{x}</b>', textposition='outside')
+                        st.plotly_chart(fig_pos, use_container_width=True)
+
+                        # Tabla
+                        df_tabla_pos = df_positivos[[col_cliente_t26, 'Estado_NPS', 'Motivo_Reclamo', 'Comentario_Cliente']].copy()
+                        df_tabla_pos.columns = ['Cliente', 'Estado', 'Motivo', 'Comentario Textual']
+                        
+                        st.dataframe(df_tabla_pos.style.map(color_estado, subset=['Estado']), use_container_width=True, hide_index=True)
+                    else:
+                        st.info("Aún no hay comentarios de promotores.")
             else:
                 st.info("No hay clientes con comentarios textuales para analizar en este período.")
-
-        else:
-            st.warning("No se pudo cargar la hoja TPA26. Verifica que existan las columnas indicadas.")
 
     # --- PESTAÑA 7: MYSTERY SHOPPER ---
     with tab_mystery:
